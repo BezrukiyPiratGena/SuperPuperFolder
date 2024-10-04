@@ -17,7 +17,7 @@ def extract_and_save_pdf_text(pdf_path, output_path):
     print(f"Текст извлечен из {pdf_path} и сохранен в {output_path}")
 
 
-pdf_path = "C:\Project1\GITProjects\myproject2\ПЖСИР.pdf"  # Путь к PDF файлу
+pdf_path = "C:\Project1\GITProjects\myproject2\НАЗВАНИЕ!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!.pdf"  # Путь к PDF файлу
 output_path = "C:\Project1\GITProjects\myproject2\extracted_text.txt"  # Путь для сохранения текста
 
 extract_and_save_pdf_text(pdf_path, output_path)

@@ -52,7 +52,7 @@ def create_embedding_for_query(query):
 
 
 # Поиск наиболее релевантных эмбеддингов на основе запроса
-def find_most_similar(query_embedding, embeddings, top_n=5):
+def find_most_similar(query_embedding, embeddings, top_n=3):
     similarities = cosine_similarity([query_embedding], embeddings)
     most_similar_indices = np.argsort(similarities[0])[::-1][:top_n]
     return most_similar_indices, similarities[0][most_similar_indices]
@@ -60,7 +60,7 @@ def find_most_similar(query_embedding, embeddings, top_n=5):
 
 # Загрузка эмбеддингов и текстов при старте бота
 texts, embeddings = load_embeddings_from_json(
-    "C:/Project1/GITProjects/myproject2/embeddings_ready.json"
+    "C:/Project1/GITProjects/myproject2/docs/ready/embeddings_ready.json"
 )
 
 
@@ -90,14 +90,17 @@ async def handle_message(update: Update, context):
         response = openai.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
+                {
+                    "role": "system",
+                    "content": 'Ты асистент компании "Связь и Радионавигация". Твоя основная задача - это помогать сотрудникам, которые хотят узнать что-то из правил компании "Связь и Радионавигация". Также ты должен уложить ответ в 50 слов',
+                },
                 {
                     "role": "system",
                     "content": f"Вот релевантная информация:\n\n{context_text}",
                 },
                 {"role": "user", "content": user_message},
             ],
-            max_tokens=500,
+            max_tokens=200,
         )
 
         # Получаем ответ от OpenAI

@@ -25,27 +25,13 @@ def create_embeddings(text):
     return embeddings
 
 
-def save_embeddings_to_file(text, embeddings, part_number):
+def process_large_text_from_file(file_path, output_path, max_chunk_size=1000):
     """
-    Сохраняет часть текста и его эмбеддинг в JSON файл.
-
-    :param text: Исходный текст.
-    :param embeddings: Эмбеддинг текста.
-    :param part_number: Номер части текста, если он был разделен.
-    """
-    data = {"text_part": f"Part {part_number}", "text": text, "embedding": embeddings}
-
-    # Сохраняем в файл JSON
-    with open("embeddings.json", "a", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-        f.write("\n")
-
-
-def process_large_text_from_file(file_path, max_chunk_size=2000):
-    """
-    Открывает текстовый файл, разделяет его на части и создает эмбеддинги для каждой части.
+    Открывает текстовый файл, разделяет его на части и создает эмбеддинги для каждой части,
+    после чего сохраняет все части в JSON файл.
 
     :param file_path: Путь к текстовому файлу.
+    :param output_path: Путь, по которому нужно сохранить итоговый JSON файл.
     :param max_chunk_size: Максимальный размер части (в символах).
     """
     # Открываем файл и читаем его содержимое
@@ -58,12 +44,26 @@ def process_large_text_from_file(file_path, max_chunk_size=2000):
         for i in range(0, len(large_text), max_chunk_size)
     ]
 
-    # Для каждой части текста создаем эмбеддинг и сохраняем его
+    embeddings_data = []  # Список для хранения всех эмбеддингов и частей текста
+
+    # Для каждой части текста создаем эмбеддинг и сохраняем его в список
     for i, part in enumerate(text_parts, 1):
         embedding = create_embeddings(part)
-        save_embeddings_to_file(part, embedding, i)
+        data = {
+            "text_part": f"Part {i}",
+            "text": part,
+            "embedding": embedding,
+        }
+        embeddings_data.append(data)  # Добавляем объект в список
+
+    # Записываем весь список данных в JSON файл
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(embeddings_data, f, ensure_ascii=False, indent=4)
+
+    print(f"Все эмбеддинги успешно сохранены в файл: {output_path}")
 
 
 # Пример использования
 file_path = r"C:\Project1\GITProjects\myproject2\extracted_text.txt"
-process_large_text_from_file(file_path)
+output_path = r"C:\Project1\GITProjects\myproject2\docs\ready\embeddings.json"
+process_large_text_from_file(file_path, output_path)
