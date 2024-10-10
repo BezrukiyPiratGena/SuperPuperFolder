@@ -1,13 +1,11 @@
 import logging
 import openai
 import os
-import json
 import numpy as np
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
 from dotenv import load_dotenv
-from sklearn.metrics.pairwise import cosine_similarity
-from openai import OpenAIError, APIError, BadRequestError
+from pymilvus import connections, Collection, utility
 
 # Загружаем переменные окружения из файла .env
 load_dotenv()
@@ -26,23 +24,30 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# Подключение к Milvus
+connections.connect("default", host="localhost", port="19530")
 
-def load_embeddings_from_json(file_path):
-    """
-    Загружает эмбеддинги и текстовые данные из файла JSON, который является массивом объектов.
+# Получаем список всех коллекций в базе данных
+all_collections = utility.list_collections()
 
-    :param file_path: Путь к файлу с эмбеддингами.
-    :return: Список текстов и их эмбеддингов.
-    """
-    with open(file_path, "r", encoding="utf-8") as f:
-        data = json.load(f)  # Загружаем весь JSON файл целиком как массив объектов
+# Собираем эмбеддинги из всех коллекций
+all_texts = []
+all_embeddings = []
 
-    texts = [item["text"] for item in data]
-    embeddings = [item["embedding"] for item in data]
-    return texts, embeddings
+for collection_name in all_collections:
+    collection = Collection(name=collection_name)
+    collection.load()
+
+    # Извлекаем эмбеддинги и тексты из коллекции
+    entities = collection.query(expr="id > 0", output_fields=["embedding", "text"])
+    texts = [entity["text"] for entity in entities]
+    embeddings = [entity["embedding"] for entity in entities]
+
+    all_texts.extend(texts)
+    all_embeddings.extend(embeddings)
 
 
-# Создание эмбеддинга для запроса пользователя
+# Функция для создания эмбеддинга запроса пользователя
 def create_embedding_for_query(query):
     response = openai.embeddings.create(
         input=[query],
@@ -51,17 +56,12 @@ def create_embedding_for_query(query):
     return response.data[0].embedding
 
 
-# Поиск наиболее релевантных эмбеддингов на основе запроса
-def find_most_similar(query_embedding, embeddings, top_n=3):
-    similarities = cosine_similarity([query_embedding], embeddings)
-    most_similar_indices = np.argsort(similarities[0])[::-1][:top_n]
-    return most_similar_indices, similarities[0][most_similar_indices]
-
-
-# Загрузка эмбеддингов и текстов при старте бота
-texts, embeddings = load_embeddings_from_json(
-    "C:/Project1/GITProjects/myproject2/docs/ready/embeddings_ready.json"
-)
+# Поиск наиболее релевантных эмбеддингов
+def find_most_similar(query_embedding, top_n=4):
+    query_embedding_np = np.array([query_embedding], dtype=np.float32)
+    similarities = np.dot(all_embeddings, query_embedding_np.T)
+    most_similar_indices = np.argsort(similarities, axis=0)[::-1][:top_n]
+    return [all_texts[i] for i in most_similar_indices.flatten()]
 
 
 # Функция для обработки команды /start
@@ -79,12 +79,10 @@ async def handle_message(update: Update, context):
         query_embedding = create_embedding_for_query(user_message)
 
         # 2. Ищем наиболее релевантные тексты на основе эмбеддингов
-        most_similar_indices, similarities = find_most_similar(
-            query_embedding, embeddings
-        )
+        most_similar_texts = find_most_similar(query_embedding)
 
         # 3. Собираем контекст из наиболее релевантных текстов
-        context_text = "\n\n".join([texts[i] for i in most_similar_indices])
+        context_text = "\n\n".join(most_similar_texts)
 
         # 4. Формируем запрос к GPT с контекстом
         response = openai.chat.completions.create(
@@ -92,7 +90,7 @@ async def handle_message(update: Update, context):
             messages=[
                 {
                     "role": "system",
-                    "content": 'Ты асистент компании "Связь и Радионавигация". Твоя основная задача - это помогать сотрудникам, которые хотят узнать что-то из правил компании "Связь и Радионавигация". Также ты должен уложить ответ в 50 слов',
+                    "content": 'Ты асистент компании "Связь и Радионавигация". Твоя основная задача - это помогать сотрудникам, которые хотят узнать что-то из правил компании "Связь и Радионавигация". Также ты должен уложить ответ в 100 слов',
                 },
                 {
                     "role": "system",
@@ -109,17 +107,6 @@ async def handle_message(update: Update, context):
 
         await update.message.reply_text(bot_reply)
 
-    except APIError as e:
-        logger.error(f"Ошибка OpenAI API: {e}")
-        await update.message.reply_text(f"Ошибка при обращении к OpenAI: {str(e)}")
-    except BadRequestError as e:
-        logger.error(f"Неверный запрос к OpenAI API: {e}")
-        await update.message.reply_text(f"Неверный запрос: {str(e)}")
-    except OpenAIError as e:
-        logger.error(f"Ошибка OpenAI: {e}")
-        await update.message.reply_text(
-            f"Произошла ошибка при обработке запроса: {str(e)}"
-        )
     except Exception as e:
         logger.error(f"Произошла ошибка: {e}")
         await update.message.reply_text(
@@ -136,7 +123,7 @@ def main():
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
     )
 
-    logger.info("Бот запущен...")
+    logger.info("Бот запущен.")
     application.run_polling()
 
 
