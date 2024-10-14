@@ -24,27 +24,35 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Подключение к Milvus
+# Подключаемся к Milvus
 connections.connect("default", host="localhost", port="19530")
 
 # Получаем список всех коллекций в базе данных
 all_collections = utility.list_collections()
 
-# Собираем эмбеддинги из всех коллекций
+# Собираем эмбеддинги из всех активных коллекций
 all_texts = []
 all_embeddings = []
 
+# Собираем эмбеддинги из всех коллекций
 for collection_name in all_collections:
     collection = Collection(name=collection_name)
-    collection.load()
 
-    # Извлекаем эмбеддинги и тексты из коллекции
-    entities = collection.query(expr="id > 0", output_fields=["embedding", "text"])
-    texts = [entity["text"] for entity in entities]
-    embeddings = [entity["embedding"] for entity in entities]
+    try:
+        # Проверяем, есть ли в коллекции данные (работает, только если коллекция активна)
+        if collection.num_entities > 0:
+            # Извлекаем эмбеддинги и тексты из коллекции
+            entities = collection.query(
+                expr="id > 0", output_fields=["embedding", "text"]
+            )
+            texts = [entity["text"] for entity in entities]
+            embeddings = [entity["embedding"] for entity in entities]
 
-    all_texts.extend(texts)
-    all_embeddings.extend(embeddings)
+            all_texts.extend(texts)
+            all_embeddings.extend(embeddings)
+    except Exception as e:
+        # Если коллекция не активна, она выдаст ошибку, которую мы можем проигнорировать
+        print(f"Коллекция {collection_name} не активна или не загружена: {e}")
 
 
 # Функция для создания эмбеддинга запроса пользователя
@@ -57,7 +65,7 @@ def create_embedding_for_query(query):
 
 
 # Поиск наиболее релевантных эмбеддингов
-def find_most_similar(query_embedding, top_n=4):
+def find_most_similar(query_embedding, top_n=8):
     query_embedding_np = np.array([query_embedding], dtype=np.float32)
     similarities = np.dot(all_embeddings, query_embedding_np.T)
     most_similar_indices = np.argsort(similarities, axis=0)[::-1][:top_n]
@@ -86,11 +94,11 @@ async def handle_message(update: Update, context):
 
         # 4. Формируем запрос к GPT с контекстом
         response = openai.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o",
             messages=[
                 {
                     "role": "system",
-                    "content": 'Ты асистент компании "Связь и Радионавигация". Твоя основная задача - это помогать сотрудникам, которые хотят узнать что-то из правил компании "Связь и Радионавигация". Также ты должен уложить ответ в 100 слов',
+                    "content": 'Я хочу, чтобы ты выступил в роли асистента-помощника по правилам компании "Связь и Радионавигация", Твоя основная задача - отвечать по тексту, не выдумывать информацию. Твой ответ должен быть не более 400 символов',
                 },
                 {
                     "role": "system",
@@ -98,7 +106,8 @@ async def handle_message(update: Update, context):
                 },
                 {"role": "user", "content": user_message},
             ],
-            max_tokens=200,
+            max_tokens=400,
+            temperature=0.6,
         )
 
         # Получаем ответ от OpenAI

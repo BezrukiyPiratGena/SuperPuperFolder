@@ -1,3 +1,4 @@
+import spacy
 from pymilvus import Index
 import openai
 import os
@@ -20,7 +21,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 connections.connect("default", host="localhost", port="19530")
 
 # Определяем коллекцию, если её ещё нет
-collection_name = "text_embeddings_all"
+collection_name = "text_emb_lg_1000"
 
 if not utility.has_collection(collection_name):
     fields = [
@@ -31,11 +32,15 @@ if not utility.has_collection(collection_name):
         FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
     ]
     schema = CollectionSchema(
-        fields, description="Коллекция для хранения текстов и эмбеддингов все части"
+        fields,
+        description="Коллекция для хранения текстов и эмбеддингов всех тестовых частей",
     )
     collection = Collection(name=collection_name, schema=schema)
 else:
     collection = Collection(name=collection_name)
+
+# Загружаем модель spaCy для разбиения текста на логические блоки
+nlp = spacy.load("ru_core_news_lg")
 
 
 def create_embeddings(text):
@@ -53,36 +58,57 @@ def create_embeddings(text):
     return embedding
 
 
-def process_large_text_from_file(file_path, max_chunk_size=1000):
+def split_text_logically(text):
     """
-    Открывает текстовый файл, разделяет его на части и создает эмбеддинги для каждой части,
+    Разбивает текст на логические блоки с использованием spaCy.
+
+    :param text: Полный текст для разбивки.
+    :return: Список логических блоков.
+    """
+    doc = nlp(text)
+    logical_blocks = []
+    current_block = []
+
+    for sent in doc.sents:  # Разделение на предложения
+        current_block.append(sent.text)
+
+        # Условие для завершения блока - можно добавить и другие условия
+        if len(" ".join(current_block)) > 1000:  # Лимит в символах для одного блока
+            logical_blocks.append(" ".join(current_block))
+            current_block = []  # Начинаем новый блок
+
+    if current_block:  # Добавляем последний блок, если он не пуст
+        logical_blocks.append(" ".join(current_block))
+
+    return logical_blocks
+
+
+def process_large_text_from_file(file_path):
+    """
+    Открывает текстовый файл, разбивает его на логические блоки и создает эмбеддинги для каждого блока,
     после чего сохраняет их в Milvus.
 
     :param file_path: Путь к текстовому файлу.
-    :param max_chunk_size: Максимальный размер части текста.
     """
     # Открываем файл и читаем его содержимое
     with open(file_path, "r", encoding="utf-8") as file:
         large_text = file.read()
 
-    # Разделяем текст на части
-    text_parts = [
-        large_text[i : i + max_chunk_size]
-        for i in range(0, len(large_text), max_chunk_size)
-    ]
+    # Разбиваем текст на логические блоки с помощью spaCy
+    text_blocks = split_text_logically(large_text)
 
-    # Для каждой части текста создаем эмбеддинг и сохраняем его в Milvus
-    for i, part in enumerate(text_parts, 1):
-        embedding = create_embeddings(part)
+    # Для каждого логического блока создаем эмбеддинг и сохраняем его в Milvus
+    for i, block in enumerate(text_blocks, 1):
+        embedding = create_embeddings(block)
 
         # Преобразуем эмбеддинг в формат numpy и затем в список для добавления в Milvus
         embedding_np = np.array(embedding, dtype=np.float32).tolist()
 
         # Вставляем эмбеддинг и текст в коллекцию
-        data = [[embedding_np], [part]]
+        data = [[embedding_np], [block]]
         collection.insert(data)
 
-        print(f"Эмбеддинг и текст успешно добавлены для части {i}.")
+        print(f"Эмбеддинг и текст успешно добавлены для блока {i}.")
     collection.flush()
     print("Все эмбеддинги и тексты успешно добавлены в Milvus.")
 
@@ -95,7 +121,7 @@ process_large_text_from_file(file_path)
 connections.connect("default", host="localhost", port="19530")
 
 # Указываем название коллекции
-collection_name = "text_embeddings_all"
+collection_name = "text_emb_lg_1000"
 collection = Collection(name=collection_name)
 
 # Определяем параметры индекса
