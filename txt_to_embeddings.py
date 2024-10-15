@@ -21,7 +21,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 connections.connect("default", host="localhost", port="19530")
 
 # Определяем коллекцию, если её ещё нет
-collection_name = "text_emb_lg_1000"
+collection_name = "text_emb_lg_500"
 
 if not utility.has_collection(collection_name):
     fields = [
@@ -73,7 +73,7 @@ def split_text_logically(text):
         current_block.append(sent.text)
 
         # Условие для завершения блока - можно добавить и другие условия
-        if len(" ".join(current_block)) > 1000:  # Лимит в символах для одного блока
+        if len(" ".join(current_block)) > 500:  # Лимит в символах для одного блока
             logical_blocks.append(" ".join(current_block))
             current_block = []  # Начинаем новый блок
 
@@ -121,7 +121,7 @@ process_large_text_from_file(file_path)
 connections.connect("default", host="localhost", port="19530")
 
 # Указываем название коллекции
-collection_name = "text_emb_lg_1000"
+collection_name = "text_emb_lg_500"
 collection = Collection(name=collection_name)
 
 # Определяем параметры индекса

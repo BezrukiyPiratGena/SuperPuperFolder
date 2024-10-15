@@ -6,6 +6,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
 from dotenv import load_dotenv
 from pymilvus import connections, Collection, utility
+import tiktoken
 
 # Загружаем переменные окружения из файла .env
 load_dotenv()
@@ -74,7 +75,15 @@ def find_most_similar(query_embedding, top_n=8):
 
 # Функция для обработки команды /start
 async def start(update: Update, context):
-    await update.message.reply_text("Привет! Задай мне любой вопрос.")
+    await update.message.reply_text(
+        "Привет! Я асистент для инженеров, можешь задать мне вопрос🌚"
+    )
+
+
+def count_tokens(text):
+    encoding = tiktoken.encoding_for_model("text-embedding-ada-002")
+    tokens = encoding.encode(text)
+    return len(tokens)
 
 
 # Функция для обработки сообщений
@@ -86,11 +95,21 @@ async def handle_message(update: Update, context):
         # 1. Создаем эмбеддинг для запроса пользователя
         query_embedding = create_embedding_for_query(user_message)
 
+        # Логирование эмбеддингов, если нужно
+        logger.info(f"Эмбеддинги, отправленные в GPT: {query_embedding}")
+
         # 2. Ищем наиболее релевантные тексты на основе эмбеддингов
         most_similar_texts = find_most_similar(query_embedding)
 
         # 3. Собираем контекст из наиболее релевантных текстов
         context_text = "\n\n".join(most_similar_texts)
+
+        # Подсчет токенов для контекста
+        token_count = count_tokens(context_text)
+        logger.info(f"Контекст содержит {token_count} токенов")
+
+        # Логирование используемых текстов
+        logger.info(f"Используемый контекст: {context_text}")
 
         # 4. Формируем запрос к GPT с контекстом
         response = openai.chat.completions.create(
@@ -98,7 +117,7 @@ async def handle_message(update: Update, context):
             messages=[
                 {
                     "role": "system",
-                    "content": 'Я хочу, чтобы ты выступил в роли асистента-помощника по правилам компании "Связь и Радионавигация", Твоя основная задача - отвечать по тексту, не выдумывать информацию. Твой ответ должен быть не более 400 символов',
+                    "content": 'Я хочу, чтобы ты выступил в роли асистента-помощника по правилам компании "Связь и Радионавигация", Твоя основная задача - отвечать по тексту, не выдумывать информацию. Твой ответ должен быть не более 400 токенов',
                 },
                 {
                     "role": "system",
