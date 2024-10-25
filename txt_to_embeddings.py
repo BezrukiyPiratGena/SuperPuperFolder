@@ -1,9 +1,10 @@
+from ast import Index
 import docx
 import spacy
-from pymilvus import Index
 import openai
 import os
 import numpy as np
+import boto3
 from dotenv import load_dotenv
 from pymilvus import (
     connections,
@@ -14,6 +15,7 @@ from pymilvus import (
     utility,
 )
 from docx import Document  # Библиотека для работы с Word документами
+from io import StringIO
 import csv
 
 # Загрузка переменных среды
@@ -23,8 +25,26 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 # Подключение к Milvus
 connections.connect("default", host="localhost", port="19530")
 
+# Подключение к MinIO
+s3_client = boto3.client(
+    "s3",
+    endpoint_url="http://localhost:9001",  # Замените на ваш URL MinIO
+    aws_access_key_id="minioadmin",
+    aws_secret_access_key="minioadmin",
+    region_name="us-east-1",
+)
+
+# Создание бакета, если он не существует
+bucket_name = "my-bucket"
+if s3_client.list_buckets().get("Buckets", None):
+    existing_buckets = [
+        bucket["Name"] for bucket in s3_client.list_buckets()["Buckets"]
+    ]
+    if bucket_name not in existing_buckets:
+        s3_client.create_bucket(Bucket=bucket_name)
+
 # Создаем коллекцию Milvus (если её нет)
-collection_name = "Eng_lg_500_word_tables"
+collection_name = "Eng_lg_500_minio_test"
 if not utility.has_collection(collection_name):
     fields = [
         FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
@@ -83,9 +103,22 @@ def split_text_logically(text):
     return logical_blocks
 
 
-def extract_text_and_tables_from_word(word_path, output_dir):
+def save_table_to_minio(bucket_name, table_name, table_data):
     """
-    Извлекает текст и таблицы из Word файла. Сохраняет таблицы как CSV файлы и
+    Сохраняет данные таблицы в MinIO в формате CSV.
+    """
+    csv_buffer = StringIO()
+    writer = csv.writer(csv_buffer)
+    for row_data in table_data:
+        writer.writerow(row_data)
+
+    # Загрузка CSV в MinIO
+    s3_client.put_object(Bucket=bucket_name, Key=table_name, Body=csv_buffer.getvalue())
+
+
+def extract_text_and_tables_from_word(word_path, bucket_name):
+    """
+    Извлекает текст и таблицы из Word файла. Сохраняет таблицы как CSV файлы в MinIO и
     возвращает список текстовых блоков и ссылок на таблицы.
     """
     doc = Document(word_path)
@@ -101,14 +134,14 @@ def extract_text_and_tables_from_word(word_path, output_dir):
             paragraph = block.text.strip()
             if paragraph:
                 if last_was_table and previous_table_data:
-                    # Сохраняем предыдущую таблицу, так как после нее идет текст
-                    csv_file_path = f"{output_dir}/table_{table_counter}.csv"
-                    save_table_to_csv(csv_file_path, previous_table_data)
+                    # Сохраняем предыдущую таблицу в MinIO, так как после нее идет текст
+                    table_name = f"table_{table_counter}.csv"
+                    save_table_to_minio(bucket_name, table_name, previous_table_data)
                     explanation = current_text_block[-1] if current_text_block else ""
                     text_blocks_with_tables.append(
-                        {"text": explanation, "table_reference": csv_file_path}
+                        {"text": explanation, "table_reference": table_name}
                     )
-                    print(f"Таблица {table_counter} сохранена в {csv_file_path}")
+                    print(f"Таблица {table_counter} загружена в MinIO как {table_name}")
                     previous_table_data = []  # Очищаем предыдущие данные
                     table_counter += 1
 
@@ -132,38 +165,28 @@ def extract_text_and_tables_from_word(word_path, output_dir):
 
             last_was_table = True  # Устанавливаем флаг
 
-    # Сохраняем последнюю таблицу, если после нее нет текста
+    # Сохраняем последнюю таблицу в MinIO, если после нее нет текста
     if last_was_table and previous_table_data:
-        csv_file_path = f"{output_dir}/table_{table_counter}.csv"
-        save_table_to_csv(csv_file_path, previous_table_data)
+        table_name = f"table_{table_counter}.csv"
+        save_table_to_minio(bucket_name, table_name, previous_table_data)
         explanation = current_text_block[-1] if current_text_block else ""
         text_blocks_with_tables.append(
-            {"text": explanation, "table_reference": csv_file_path}
+            {"text": explanation, "table_reference": table_name}
         )
-        print(f"Таблица {table_counter} сохранена в {csv_file_path}")
+        print(f"Таблица {table_counter} загружена в MinIO как {table_name}")
 
     return text_blocks_with_tables, " ".join(
         current_text_block
     )  # Возвращаем также весь текст
 
 
-def save_table_to_csv(csv_file_path, table_data):
-    """
-    Сохраняет данные таблицы в CSV файл.
-    """
-    with open(csv_file_path, mode="w", newline="", encoding="utf-8") as file:
-        writer = csv.writer(file)
-        for row_data in table_data:
-            writer.writerow(row_data)
-
-
-def process_large_text_and_tables_from_word(word_path, output_dir):
+def process_large_text_and_tables_from_word(word_path, bucket_name):
     """
     Обрабатывает Word документ: извлекает текст и таблицы, создает эмбеддинги и сохраняет их в Milvus.
     """
     # Извлекаем текст и таблицы из Word файла
     text_blocks_with_tables, full_text = extract_text_and_tables_from_word(
-        word_path, output_dir
+        word_path, bucket_name
     )
 
     # Сохраняем логические блоки текста как раньше
@@ -202,21 +225,23 @@ def process_large_text_and_tables_from_word(word_path, output_dir):
 
 
 # Пример использования
-word_path = r"C:\Project1\GITProjects\myproject2\example_full.docx"
-output_dir = r"C:\Project1\Документы для обучения GPT\Тестовые данные"
-process_large_text_and_tables_from_word(word_path, output_dir)
+word_path = r"C:\Project1\GITProjects\myproject2\example_table.docx"
+process_large_text_and_tables_from_word(word_path, bucket_name)
 
 # Определяем параметры индекса
 index_params = {
-    "index_type": "IVF_FLAT",
-    "metric_type": "L2",
-    "params": {"nlist": 128},
+    "index_type": "IVF_FLAT",  # Выберите тип индекса, который вам подходит
+    "metric_type": "L2",  # Выберите метрику расстояния (например, L2 для евклидова расстояния)
+    "params": {
+        "nlist": 128
+    },  # Задайте параметры индекса (например, количество кластеров)
 }
 
 # Создаем индекс
-index = Index(collection, field_name="embedding", index_params=index_params)
+collection.create_index(field_name="embedding", index_params=index_params)
 
 # Загружаем коллекцию
 collection.load()
+
 
 print(f"Индекс успешно создан и коллекция '{collection_name}' загружена.")

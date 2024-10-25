@@ -7,17 +7,35 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 from dotenv import load_dotenv
 from pymilvus import connections, Collection, utility
 import tiktoken
-import csv
+import boto3  # Библиотека для работы с MinIO (S3 совместимое API)
+from botocore.exceptions import NoCredentialsError
 
-# Загружаем переменные окружения из файла .env
-load_dotenv()
+# Загрузка переменных окружения из файла .env
+load_dotenv("tokens.env")
 
 # Устанавливаем ключи API из переменных окружения
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
+MINIO_BUCKET_NAME = "my-bucket"  # Заменить на название твоего бакета
+MINIO_ENDPOINT = "http://127.0.0.1:9001"
+
 
 # Устанавливаем ключ OpenAI API
 openai.api_key = OPENAI_API_KEY
+
+# Настройка MinIO клиента
+s3_client = boto3.client(
+    "s3",
+    endpoint_url=MINIO_ENDPOINT,
+    aws_access_key_id=MINIO_ACCESS_KEY,
+    aws_secret_access_key=MINIO_SECRET_KEY,
+    region_name="us-east-1",  # Можно оставить любое, т.к. MinIO не использует регионы
+)
+print(f'Логин "{MINIO_ACCESS_KEY}" для БД MiniO')
+print(f'Пароль "{MINIO_SECRET_KEY}" для БД MiniO')
+
 
 # Настройка логирования
 logging.basicConfig(
@@ -79,17 +97,19 @@ def find_most_similar(query_embedding, top_n=8):
     ]
 
 
-# Чтение содержимого таблицы из CSV файла
-def read_table_from_csv(table_reference):
-    if not table_reference:
-        return None
+# Чтение содержимого таблицы из MinIO (S3 хранилища)
+def read_table_from_minio(table_reference):
     try:
-        with open(table_reference, mode="r", newline="", encoding="utf-8") as file:
-            reader = csv.reader(file)
-            table_content = "\n".join([", ".join(row) for row in reader])
+        response = s3_client.get_object(Bucket=MINIO_BUCKET_NAME, Key=table_reference)
+        table_content = (
+            response["Body"].read().decode("utf-8")
+        )  # Прочитать и декодировать в строку
         return table_content
+    except NoCredentialsError as e:
+        logger.error(f"Ошибка аутентификации в MinIO: {e}")
+        return None
     except Exception as e:
-        logger.error(f"Не удалось прочитать таблицу: {e}")
+        logger.error(f"Не удалось прочитать таблицу из MinIO: {e}")
         return None
 
 
@@ -115,24 +135,22 @@ async def handle_message(update: Update, context):
         # 1. Создаем эмбеддинг для запроса пользователя
         query_embedding = create_embedding_for_query(user_message)
 
-        # Убрали логирование эмбеддингов
-        # logger.info(f"Эмбеддинги, отправленные в GPT: {query_embedding}")
-
         # 2. Ищем наиболее релевантные тексты и ссылки на таблицы
         most_similar_texts, most_similar_table_refs = find_most_similar(query_embedding)
 
         # 3. Собираем контекст из наиболее релевантных текстов
         context_text = "\n\n".join(most_similar_texts)
 
-        # Чтение таблиц и добавление их в контекст
+        # Чтение таблиц и добавление их в контекст из MinIO
         table_contexts = []
         for table_ref in most_similar_table_refs:
             if table_ref:  # Если есть ссылка на таблицу
-                table_content = read_table_from_csv(table_ref)
+                table_content = read_table_from_minio(
+                    table_ref
+                )  # Используем MinIO вместо локального чтения
                 if table_content:
                     table_contexts.append(table_content)
-                    # Логирование названия таблицы
-                    logger.info(f"Использована таблица: {table_ref}")
+                    logger.info(f"Использована таблица из MinIO: {table_ref}")
 
         # Добавляем таблицы в контекст
         if table_contexts:
@@ -151,7 +169,7 @@ async def handle_message(update: Update, context):
             messages=[
                 {
                     "role": "system",
-                    "content": 'Я хочу, чтобы ты выступил в роли асистента-помощника по правилам компании "Связь и Радионавигация", Твоя основная задача - отвечать развернуто, не сжимая текст, не выдумывать информацию.',
+                    "content": 'Я хочу, чтобы ты выступил в роли асистента-помощника по правилам компании "Связь и Радионавигация". Твоя основная задача - отвечать не сжимая текст, не выдумывать информацию.',
                 },
                 {
                     "role": "system",
@@ -160,7 +178,7 @@ async def handle_message(update: Update, context):
                 {"role": "user", "content": user_message},
             ],
             # max_tokens=600,
-            temperature=0.6,
+            temperature=0.5,
         )
 
         # Получаем ответ от OpenAI
