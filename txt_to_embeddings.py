@@ -1,4 +1,5 @@
 from ast import Index
+import re
 import docx
 import spacy
 import openai
@@ -15,35 +16,27 @@ from pymilvus import (
     utility,
 )
 from docx import Document
-from io import StringIO
+from io import BytesIO, StringIO
+from PIL import Image
 import csv
 
 # Загрузка переменных среды
 load_dotenv("tokens.env")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # Ключ OpenAI
-MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")  # Логин Minlo
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")  # Пароль Minlo
-MINIO_BUCKET_NAME = os.getenv("MINIO_BUCKET_NAME")  # Бакет Minlo
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")  # Адрес и порт для подключения к minlo
-MINIO_REGION_NAME = os.getenv("MINIO_REGION_NAME")  # Регион Minlo
-MILFUS_HOST = os.getenv("MILFUS_HOST")  # Адрес для подключения к Milfus
-MILFUS_PORT = os.getenv("MILFUS_PORT")  # Порт для подключения к Milfus
-MILFUS_COLLECTION = os.getenv(
-    "MILFUS_COLLECTION"
-)  # Коллекция для внесения эмбеддингов в Milfus
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
+MINIO_BUCKET_NAME = os.getenv("MINIO_BUCKET_NAME")
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")
+MINIO_REGION_NAME = os.getenv("MINIO_REGION_NAME")
+MILVUS_HOST = os.getenv("MILVUS_HOST")
+MILVUS_PORT = os.getenv("MILVUS_PORT")
+MILVUS_COLLECTION = os.getenv("MILVUS_COLLECTION")
 
-# Меняем значения важных переменных
-name_of_collection_milfus = MILFUS_COLLECTION
-name_of_bucket_miniO = MINIO_BUCKET_NAME
+# Настройка важных переменных
+name_of_collection_milvus = MILVUS_COLLECTION
+name_of_bucket_minio = MINIO_BUCKET_NAME
 path_of_doc_for_convert = r"C:\Project1\GITProjects\myproject2\example_full.docx"
-
-# Устанавливаем ключ OpenAI API
 openai.api_key = OPENAI_API_KEY
-
-# Подключение к Milvus
-connections.connect("default", host=MILFUS_HOST, port=MILFUS_PORT)
-print(f'Логин "{MINIO_ACCESS_KEY}" для БД MiniO')
-print(f'Пароль "{MINIO_SECRET_KEY}" для БД MiniO')
 
 # Подключение к MinIO
 s3_client = boto3.client(
@@ -54,205 +47,275 @@ s3_client = boto3.client(
     region_name=MINIO_REGION_NAME,
 )
 
-# Создание бакета, если он не существует
-bucket_name = name_of_bucket_miniO
+# Подключение к Milvus
+connections.connect("default", host=MILVUS_HOST, port=MILVUS_PORT)
+
+# Создание бакета MinIO, если он не существует
 if s3_client.list_buckets().get("Buckets", None):
     existing_buckets = [
         bucket["Name"] for bucket in s3_client.list_buckets()["Buckets"]
     ]
-    if bucket_name not in existing_buckets:
-        s3_client.create_bucket(Bucket=bucket_name)
+    if name_of_bucket_minio not in existing_buckets:
+        s3_client.create_bucket(Bucket=name_of_bucket_minio)
 
-# Создаем коллекцию Milvus (если её нет)
-collection_name = name_of_collection_milfus
+# Создание коллекции Milvus (если её нет)
+collection_name = name_of_collection_milvus
 if not utility.has_collection(collection_name):
     fields = [
         FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
         FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=1536),
         FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
-        FieldSchema(name="table_reference", dtype=DataType.VARCHAR, max_length=65535),
+        FieldSchema(name="reference", dtype=DataType.VARCHAR, max_length=65535),
+        FieldSchema(name="figure_id", dtype=DataType.VARCHAR, max_length=100),
     ]
-    schema = CollectionSchema(
-        fields,
-        description="Коллекция для хранения инженерского справочника",
-    )
+    schema = CollectionSchema(fields, description="Коллекция для хранения данных")
     collection = Collection(name=collection_name, schema=schema)
 else:
     collection = Collection(name=collection_name)
 
-# Загружаем модель spaCy для разбиения текста на логические блоки
+# Загрузка модели spaCy
 nlp = spacy.load("ru_core_news_lg")
 
 
 def create_embeddings(text):
-    """
-    Преобразует текст в эмбеддинг с помощью OpenAI.
-    """
+    """Создает эмбеддинг текста с помощью OpenAI."""
     if not text.strip():
         return None
-    response = openai.embeddings.create(
-        input=[text],
-        model="text-embedding-ada-002",
-    )
-    embedding = response.data[0].embedding
-    return embedding
+    response = openai.embeddings.create(input=[text], model="text-embedding-ada-002")
+    return response.data[0].embedding
 
 
 def split_text_logically(text):
-    """
-    Разбивает текст на логические блоки с использованием spaCy.
-    """
+    """Разделяет текст на логические блоки."""
     doc = nlp(text)
     logical_blocks = []
     current_block = []
-
     for sent in doc.sents:
         current_block.append(sent.text)
-
         if len(" ".join(current_block)) > 500:
             logical_blocks.append(" ".join(current_block))
             current_block = []
-
     if current_block:
         logical_blocks.append(" ".join(current_block))
-
     return logical_blocks
 
 
 def save_table_to_minio(bucket_name, table_name, table_data):
-    """
-    Сохраняет данные таблицы в MinIO в формате CSV.
-    """
+    """Сохраняет таблицу в MinIO в формате CSV."""
     csv_buffer = StringIO()
     writer = csv.writer(csv_buffer)
     for row_data in table_data:
         writer.writerow(row_data)
+    s3_client.put_object(
+        Bucket=bucket_name, Key=table_name, Body=csv_buffer.getvalue().encode("utf-8")
+    )
 
-    # Загрузка CSV в MinIO
-    s3_client.put_object(Bucket=bucket_name, Key=table_name, Body=csv_buffer.getvalue())
+
+def save_image_to_minio(bucket_name, image_name, image_data):
+    """Сохраняет изображение в MinIO как JPEG файл и возвращает имя файла."""
+    buffer = BytesIO()
+    image_data = image_data.convert(
+        "RGB"
+    )  # Конвертируем изображение в RGB перед сохранением
+    image_data.save(buffer, format="JPEG")
+    s3_client.put_object(Bucket=bucket_name, Key=image_name, Body=buffer.getvalue())
+    print(f"Изображение загружено в MinIO как {image_name}")
+    return image_name  # Возвращаем имя файла вместо ссылки
 
 
-def extract_text_and_tables_from_word(word_path, bucket_name):
-    """
-    Извлекает текст и таблицы из Word файла. Сохраняет таблицы как CSV файлы в MinIO и
-    возвращает список текстовых блоков и ссылок на таблицы.
-    """
+# Функция для извлечения "Рисунок Х" из текста
+def extract_figure_id(text):
+    match = re.search(r"(Рисунок \d+)", text)
+    if match:
+        return match.group(1)
+    return ""
+
+
+def extract_content_from_word(word_path, bucket_name):
+    """Извлекает текст, таблицы и изображения из Word файла, избегая дубликатов."""
     doc = Document(word_path)
-    text_blocks_with_tables = []
+    text_blocks_with_refs = []
     current_text_block = []
     current_table_data = []
-    previous_table_data = []
-    table_counter = 1
+    table_counter, image_counter = 1, 1
     last_was_table = False
+    saved_images = set()  # Набор для отслеживания сохраненных изображений
 
+    # Обработка текста и таблиц
     for idx, block in enumerate(doc.element.body):
-        if block.tag.endswith("p"):
+        if block.tag.endswith("p"):  # Обработка параграфов
             paragraph = block.text.strip()
             if paragraph:
-                if last_was_table and previous_table_data:
+                if last_was_table and current_table_data:
+                    # Сохраняем текущую собранную таблицу в MinIO как одну таблицу
                     table_name = f"table_{table_counter}.csv"
-                    save_table_to_minio(bucket_name, table_name, previous_table_data)
+                    save_table_to_minio(bucket_name, table_name, current_table_data)
                     explanation = current_text_block[-1] if current_text_block else ""
-                    text_blocks_with_tables.append(
-                        {"text": explanation, "table_reference": table_name}
+                    text_blocks_with_refs.append(
+                        {"text": explanation, "reference": table_name, "figure_id": ""}
                     )
-                    print(f"Таблица {table_counter} загружена в MinIO как {table_name}")
-                    previous_table_data = []
+                    current_table_data = []  # Сброс текущих данных таблицы
                     table_counter += 1
-
                 current_text_block.append(paragraph)
                 last_was_table = False
 
-        elif block.tag.endswith("tbl"):
+        elif block.tag.endswith("tbl"):  # Обработка таблиц
             table = next(t for t in doc.tables if t._tbl == block)
-            current_table_data = [
+            table_data = [
                 [cell.text.strip() for cell in row.cells] for row in table.rows
             ]
 
+            # Объединяем таблицы, если они идут подряд
             if last_was_table:
-                previous_table_data.extend(current_table_data)
+                current_table_data.extend(table_data)
             else:
-                previous_table_data = current_table_data
+                current_table_data = table_data
 
+            # Обработка изображений внутри таблиц
+            for row in table.rows:
+                for cell in row.cells:
+                    for paragraph_index, paragraph in enumerate(cell.paragraphs):
+                        for run in paragraph.runs:
+                            if run.element.xpath(".//a:blip"):
+                                blip = run.element.xpath(".//a:blip")[0]
+                                image_part = doc.part.related_parts[
+                                    blip.get(
+                                        "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed"
+                                    )
+                                ]
+                                # Проверка на дубликат
+                                if image_part in saved_images:
+                                    continue
+                                saved_images.add(image_part)
+
+                                image_data = Image.open(BytesIO(image_part.blob))
+                                image_name = f"image_{image_counter}.jpeg"
+                                save_image_to_minio(bucket_name, image_name, image_data)
+
+                                # Получаем следующий параграф для описания, если он существует
+                                if paragraph_index + 1 < len(cell.paragraphs):
+                                    text_after_image = cell.paragraphs[
+                                        paragraph_index + 1
+                                    ].text.strip()
+                                else:
+                                    text_after_image = "Описание отсутствует"
+
+                                # Извлекаем "Рисунок Х" из описания, если оно есть
+                                figure_id = extract_figure_id(text_after_image)
+
+                                # Добавляем запись с `text`, `reference` и `figure_id`
+                                text_blocks_with_refs.append(
+                                    {
+                                        "text": text_after_image,
+                                        "reference": image_name,
+                                        "figure_id": figure_id,
+                                    }
+                                )
+                                print(
+                                    f"Изображение {image_name} загружено с описанием: {text_after_image}, figure_id: {figure_id}"
+                                )
+                                image_counter += 1
             last_was_table = True
 
-    if last_was_table and previous_table_data:
-        table_name = f"table_{table_counter}.csv"
-        save_table_to_minio(bucket_name, table_name, previous_table_data)
-        explanation = current_text_block[-1] if current_text_block else ""
-        text_blocks_with_tables.append(
-            {"text": explanation, "table_reference": table_name}
-        )
-        print(f"Таблица {table_counter} загружена в MinIO как {table_name}")
+    # Обработка изображений вне таблиц
+    paragraphs = iter(doc.paragraphs)
+    for paragraph in paragraphs:
+        for run in paragraph.runs:
+            if run.element.xpath(".//a:blip"):
+                # Найдено изображение
+                blip = run.element.xpath(".//a:blip")[0]
+                image_part = doc.part.related_parts[
+                    blip.get(
+                        "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed"
+                    )
+                ]
+                # Проверка на дубликат
+                if image_part in saved_images:
+                    continue
+                saved_images.add(image_part)
 
-    return text_blocks_with_tables, " ".join(current_text_block)
+                image_data = Image.open(BytesIO(image_part.blob))
+                image_name = f"image_{image_counter}.jpeg"
+                save_image_to_minio(bucket_name, image_name, image_data)
+
+                # Ищем текст непосредственно после изображения
+                try:
+                    next_paragraph = next(paragraphs)
+                    text_after_image = (
+                        next_paragraph.text.strip()
+                        if next_paragraph.text.strip()
+                        else "Описание отсутствует"
+                    )
+                except StopIteration:
+                    text_after_image = "Описание отсутствует"
+
+                # Извлекаем "Рисунок Х" для сохранения в поле figure_id
+                figure_id = extract_figure_id(text_after_image)
+
+                text_blocks_with_refs.append(
+                    {
+                        "text": text_after_image,
+                        "reference": image_name,
+                        "figure_id": figure_id,
+                    }
+                )
+                print(
+                    f"Изображение {image_name} загружено с описанием: {text_after_image} и 'figure_id': {figure_id}"
+                )
+                image_counter += 1
+
+    return text_blocks_with_refs, " ".join(current_text_block)
 
 
-def process_large_text_and_tables_from_word(word_path, bucket_name):
-    """
-    Обрабатывает Word документ: извлекает текст и таблицы, создает эмбеддинги и сохраняет их в Milvus.
-    """
-    # Счетчик успешных эмбеддингов
+def process_content_from_word(word_path, bucket_name):
+    """Обрабатывает текст, таблицы и изображения из Word файла и сохраняет в Milvus."""
     successful_embeddings_count = 0
-
-    # Извлекаем текст и таблицы из Word файла
-    text_blocks_with_tables, full_text = extract_text_and_tables_from_word(
-        word_path, bucket_name
-    )
-
-    # Сохраняем логические блоки текста
+    text_blocks_with_refs, full_text = extract_content_from_word(word_path, bucket_name)
     text_blocks = split_text_logically(full_text)
+
     for block in text_blocks:
-        embedding = create_embeddings(block)
-        if embedding is None:
-            continue
+        if block and block.strip():  # Проверка, чтобы блок текста не был пустым
+            embedding = create_embeddings(block)
+            if embedding is None:
+                continue
+            embedding_np = np.array(embedding, dtype=np.float32).tolist()
+            data = [[embedding_np], [block], [""], [""]]
+            collection.insert(data)
+            successful_embeddings_count += 1
+            print(
+                f"Эмбеддинг и текст успешно добавлены для блока {successful_embeddings_count}."
+            )
+        else:
+            print("Пустой текст, пропуск эмбеддинга")
 
-        embedding_np = np.array(embedding, dtype=np.float32).tolist()
-        data = [[embedding_np], [block], [""]]
-        collection.insert(data)
-        successful_embeddings_count += 1
-
-        print(
-            f"Эмбеддинг и текст успешно добавлены для блока {successful_embeddings_count}."
-        )
-
-    # Сохраняем таблицы с пояснением
-    for i, block_info in enumerate(text_blocks_with_tables, 1):
-        text = block_info["text"]
-        table_reference = block_info["table_reference"]
-
-        embedding = create_embeddings(text)
-        if embedding is None:
-            continue
-
-        embedding_np = np.array(embedding, dtype=np.float32).tolist()
-        data = [[embedding_np], [text], [table_reference]]
-        collection.insert(data)
-        successful_embeddings_count += 1
-        print(
-            f"Эмбеддинг и пояснение успешно добавлены для таблицы. Ссылка на таблицу: {table_reference}"
-        )
+    for ref_info in text_blocks_with_refs:
+        text = ref_info["text"]
+        reference = ref_info["reference"]
+        figure_id = ref_info["figure_id"]
+        if text and text.strip():  # Проверка, чтобы текст описания не был пустым
+            embedding = create_embeddings(text)
+            if embedding is None:
+                continue
+            embedding_np = np.array(embedding, dtype=np.float32).tolist()
+            data = [[embedding_np], [text], [reference], [figure_id]]
+            collection.insert(data)
+            successful_embeddings_count += 1
+            print(f"Эмбеддинг и пояснение успешно добавлены для объекта: {reference}")
+        else:
+            print("Пустое описание, пропуск эмбеддинга для объекта:", reference)
 
     collection.flush()
-    print("Все эмбеддинги и тексты успешно добавлены в Milvus.")
+    print("Все эмбеддинги и данные успешно добавлены в Milvus.")
     print(f"Количество успешно созданных эмбеддингов: {successful_embeddings_count}")
 
 
 # Пример использования
 word_path = path_of_doc_for_convert
-process_large_text_and_tables_from_word(word_path, bucket_name)
+process_content_from_word(word_path, name_of_bucket_minio)
 
-# Определяем параметры индекса
-index_params = {
-    "index_type": "IVF_FLAT",
-    "metric_type": "L2",
-    "params": {"nlist": 128},
-}
-
-# Создаем индекс
+# Создание и загрузка индекса в Milvus
+index_params = {"index_type": "IVF_FLAT", "metric_type": "L2", "params": {"nlist": 128}}
 collection.create_index(field_name="embedding", index_params=index_params)
-
-# Загружаем коллекцию
 collection.load()
 
 print(f"Индекс успешно создан и коллекция '{collection_name}' загружена.")

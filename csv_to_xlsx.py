@@ -25,6 +25,6 @@ def convert_csv_to_xlsx_openpyxl(csv_file, xlsx_file):
 
 
 # Пример использования
-csv_file = r"C:\Project1\Документы для обучения GPT\Тестовые данные\table_71.csv"
-xlsx_file = r"C:\Project1\Документы для обучения GPT\Тестовые данные\table_71.xlsx"
+csv_file = r"C:\Project1\GITProjects\myproject2\table_5.csv"
+xlsx_file = r"C:\Project1\GITProjects\myproject2\table_5.xlsx"
 convert_csv_to_xlsx_openpyxl(csv_file, xlsx_file)

@@ -11,6 +11,9 @@ from pymilvus import connections, Collection, utility
 import tiktoken
 import boto3  # Библиотека для работы с MinIO (S3 совместимое API)
 from botocore.exceptions import NoCredentialsError
+from telegram import InputMediaPhoto
+import re
+import asyncio
 
 # Загрузка переменных окружения из файла .env
 load_dotenv("tokens.env")
@@ -21,10 +24,12 @@ MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
 MINIO_BUCKET_NAME = os.getenv("MINIO_BUCKET_NAME")
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")
 MINIO_REGION_NAME = os.getenv("MINIO_REGION_NAME")
-MILFUS_HOST = os.getenv("MILFUS_HOST")
-MILFUS_PORT = os.getenv("MILFUS_PORT")
+MILVUS_HOST = os.getenv("MILVUS_HOST")
+MILVUS_PORT = os.getenv("MILVUS_PORT")
 SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")  # ID Google Таблицы MODEL_GPT_INT
 MODEL_GPT_INT = os.getenv("MODEL_GPT_INT")
+MILVUS_COLLECTION = os.getenv("MILVUS_COLLECTION")
+
 
 # Устанавливаем ключ OpenAI API
 openai.api_key = OPENAI_API_KEY
@@ -56,7 +61,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Подключаемся к Milvus
-connections.connect("default", host=MILFUS_HOST, port=MILFUS_PORT)
+connections.connect("default", host=MILVUS_HOST, port=MILVUS_PORT)
 
 # Получаем список всех коллекций в базе данных
 all_collections = utility.list_collections()
@@ -72,11 +77,11 @@ for collection_name in all_collections:
     try:
         if collection.num_entities > 0:
             entities = collection.query(
-                expr="id > 0", output_fields=["embedding", "text", "table_reference"]
+                expr="id > 0", output_fields=["embedding", "text", "reference"]
             )
             texts = [entity["text"] for entity in entities]
             embeddings = [entity["embedding"] for entity in entities]
-            table_references = [entity["table_reference"] for entity in entities]
+            table_references = [entity["reference"] for entity in entities]
 
             all_texts.extend(texts)
             all_embeddings.extend(embeddings)
@@ -106,10 +111,19 @@ def find_most_similar(query_embedding, top_n=10):
 
 # Чтение содержимого таблицы из MinIO (S3 хранилища)
 def read_table_from_minio(table_reference):
+    """Читает таблицу из MinIO и возвращает её содержимое в виде текста."""
     try:
         response = s3_client.get_object(Bucket=MINIO_BUCKET_NAME, Key=table_reference)
-        table_content = response["Body"].read().decode("utf-8")
-        return table_content
+        try:
+            # Попытка декодировать как utf-8
+            table_content = response["Body"].read().decode("utf-8")
+            return table_content
+        except UnicodeDecodeError:
+            # Логгируем ошибку, если не удается декодировать данные
+            logger.error(
+                f"Не удалось декодировать содержимое таблицы {table_reference} как utf-8."
+            )
+            return None
     except NoCredentialsError as e:
         logger.error(f"Ошибка аутентификации в MinIO: {e}")
         return None
@@ -141,72 +155,162 @@ def save_user_question_to_sheet(user_message, gpt_response, user_tag):
 
 
 # Функция для обработки сообщений
+from telegram import InputMediaPhoto
+
+user_image_context = {}
+
+
 async def handle_message(update: Update, context):
+    user_id = update.message.from_user.id
     user_message = update.message.text
-    user_tag = (
-        update.message.from_user.username or update.message.from_user.full_name
-    )  # Получение никнейма или имени пользователя
+    user_tag = update.message.from_user.username or update.message.from_user.full_name
     logger.info(f"Получено сообщение от {user_tag}: {user_message}")
 
+    # Если сообщение не является запросом изображения, продолжаем стандартную обработку через GPT
     try:
         query_embedding = create_embedding_for_query(user_message)
-        most_similar_texts, most_similar_table_refs = find_most_similar(query_embedding)
+        most_similar_texts, most_similar_refs = find_most_similar(query_embedding)
         context_text = "\n\n".join(most_similar_texts)
 
         table_contexts = []
-        for table_ref in most_similar_table_refs:
-            if table_ref:
-                table_content = read_table_from_minio(table_ref)
-                if table_content:
-                    table_contexts.append(table_content)
-                    logger.info(f"Использована таблица из MinIO: {table_ref}")
+        images_to_mention = []
+        unique_table_references = set()  # Множество для уникальных ссылок на таблицы
+
+        # Проверяем таблицы и ищем изображения
+        for i, ref in enumerate(most_similar_refs):
+            if ref.endswith(".csv"):  # Если это таблица
+                if ref not in unique_table_references:
+                    unique_table_references.add(ref)
+                    table_content = read_table_from_minio(ref)
+                    if table_content:
+                        table_name = most_similar_texts[i]
+                        table_contexts.append(f"{table_name}:\n{table_content}")
+                        logger.info(f"Использована таблица из MinIO: {ref}")
+                    else:
+                        logger.warning(f"Пропущена таблица {ref} из-за ошибок чтения.")
+            elif re.search(
+                r"Рисунок \d+ \(.+\)", most_similar_texts[i]
+            ):  # Если это изображение
+                images_to_mention.append((most_similar_texts[i], ref))
 
         if table_contexts:
             context_text += "\n\nТаблицы:\n" + "\n\n".join(table_contexts)
 
+        if images_to_mention:
+            context_text += (
+                "\n\nДополнительные изображения по вашему запросу:\n"
+                + "\n".join([img[0] for img in images_to_mention])
+            )
+
         token_count = count_tokens(context_text)
         logger.info(f"Контекст содержит {token_count} токенов")
         logger.info(f"Используемый контекст: {context_text}")
+
+        # Ищем упоминания рисунков в ответе и создаем ссылки на них
+        all_image_mentions = find_image_mentions(context_text)
+        images_to_mention = []
+        for image_text in all_image_mentions:
+            image_ref = find_image_reference_in_milvus(image_text)
+            if image_ref:
+                images_to_mention.append((image_text, image_ref))
 
         response = openai.chat.completions.create(
             model=MODEL_GPT_INT,
             messages=[
                 {
                     "role": "system",
-                    "content": 'Я хочу, чтобы ты выступил в роли асистента-помощника по правилам компании "Связь и Радионавигация". Твоя основная задача - отвечать не сжимая текст, не выдумывать информацию.',
+                    "content": (
+                        'Я хочу, чтобы ты выступил в роли асистента-помощника по правилам компании "Связь и Радионавигация". '
+                        "Твоя основная задача - отвечать на вопросы, анализируя предоставленные данные, без выдумывания информации. "
+                        "Если в контексте будут таблицы, ты должен извлечь из них всю информацию, не сжимая ее и отправить эту таблицу в виде списка "
+                        'Если в контексте в таблицах узаканы рисунки, ты должен учитывать их все в ответе в формате "Рисунок X" и не склоняя Рисунок Х'
+                        "Если ты упоминаешь рисунки, то не склоняй Рисунка\Рисунки\Рисунков\Рисунке Х и т.д. Всегда пиши РисунОК Х"
+                    ),
                 },
                 {
                     "role": "system",
-                    "content": f"Вот релевантная информация:\n\n{context_text}",
+                    "content": f"Дополнительные изображения по вашему запросу:\n\n{'\n'.join([img[0] for img in images_to_mention])}\n\n"
+                    f"Вот релевантная информация:\n\n{context_text}",
                 },
                 {"role": "user", "content": user_message},
             ],
             temperature=0.4,
         )
+        bot_reply = response.choices[0].message.content
+        # Найти дополнительные упоминания рисунков, которые есть только в bot_reply
+        additional_image_mentions = find_image_mentions(bot_reply)
+        for image_text in additional_image_mentions:
+            if image_text not in [mention[0] for mention in images_to_mention]:
+                # Если упоминание найдено в bot_reply, но не в контексте, ищем его ссылку
+                image_ref = find_image_reference_in_milvus(image_text)
+                if image_ref:
+                    images_to_mention.append((image_text, image_ref))
 
         bot_reply = response.choices[0].message.content
-        logger.info(f"Ответ от OpenAI: {bot_reply}")
-        await update.message.reply_text(bot_reply)
+        # Замена символов < и > на HTML-эквиваленты
+        bot_reply = bot_reply.replace("<", "&lt;").replace(">", "&gt;")
+        formatted_reply = format_image_links(bot_reply, images_to_mention)
+        logger.info(f"Ответ от OpenAI: {formatted_reply}")
+        await update.message.reply_text(formatted_reply, parse_mode="HTML")
 
-        # Сохраняем вопрос пользователя, ответ GPT и никнейм в Google Таблицу
+        images_to_send = []
+        for image_text, ref in images_to_mention:
+            if image_text.split(" ")[0] in bot_reply:
+                images_to_send.append(ref)
+
         save_user_question_to_sheet(user_message, bot_reply, user_tag)
 
-        # Добавление кнопок для оценки качества
-        reply_keyboard = [
-            ["Хорошо"],
-            ["Удовлетворительно"],
-            ["Плохо"],
-        ]
+        reply_keyboard = [["Хорошо"], ["Удовлетворительно"], ["Плохо"]]
         markup = ReplyKeyboardMarkup(
             reply_keyboard, one_time_keyboard=True, resize_keyboard=True
         )
         await update.message.reply_text("Оцените качество ответа:", reply_markup=markup)
-
+        await asyncio.sleep(1)
     except Exception as e:
         logger.error(f"Произошла ошибка: {e}")
         await update.message.reply_text(
             f"Произошла ошибка при получении ответа: {str(e)}"
         )
+
+
+def format_image_links(bot_reply, images_to_mention):
+    """Форматирует текст ответа, добавляя кликабельные ссылки на изображения."""
+    for image_text, ref in images_to_mention:
+
+        # Создаем URL для изображения
+        image_url = f"{MINIO_ENDPOINT}/{MINIO_BUCKET_NAME}/{ref}"
+
+        # Формируем кликабельную ссылку в формате HTML
+        link_text = f'<a href="{image_url}">{image_text}</a>'
+
+        # Заменяем только точное упоминание "Рисунок X" на кликабельную ссылку
+        bot_reply = bot_reply.replace(image_text, link_text)
+
+    return bot_reply
+
+
+def escape_markdown(text):
+    """Экранирует символы, требующие экранирования в MarkdownV2."""
+    escape_chars = r"_*[]()~`>#+--=|{}.!"
+    return "".join(f"\\{char}" if char in escape_chars else char for char in text)
+
+
+def find_image_mentions(text):
+    pattern = r"Рисунок \d+"
+    return re.findall(pattern, text)
+
+
+def find_image_reference_in_milvus(figure_id):
+    collection = Collection(name=MILVUS_COLLECTION)
+    try:
+        result = collection.query(
+            expr=f'figure_id == "{figure_id}"', output_fields=["reference"]
+        )
+        if result:
+            return result[0]["reference"]
+    except Exception as e:
+        logger.error(f"Ошибка при поиске в Milvus для '{figure_id}': {e}")
+    return None
 
 
 # Функция для обработки оценок
