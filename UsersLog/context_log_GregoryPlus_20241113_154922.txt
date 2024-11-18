@@ -1,0 +1,112 @@
+Контекст для запроса от пользователя GregoryPlus:
+
+Таблица обозначений схемы гирокомпаса Yokogawa CMZ900
+
+Рисунок 123 (Схема Yokogawa CMZ900)
+
+Таблица обозначений схемы гирокомпаса Yokogawa CMZ700
+
+Рисунок 222 (Плата CMZ700,CMZ500-Mod700 YOKOHAWA №1)
+
+Рисунок 224 (Плата CMZ700,CMZ500-Mod700 YOKOHAWA №3)
+
+Рисунок 216 (Кнопки CMZ700,CMZ500-Mod700 YOKOHAWA)
+
+Рисунок 223 (Плата CMZ700,CMZ500-Mod700 YOKOHAWA №2)
+
+Рисунок 215 (Внутренности CMZ700,CMZ500-Mod700 YOKOHAWA)
+
+Рисунок 218 (Проверка работы Кнопки CMZ700,CMZ500-Mod700 YOKOHAWA №1)
+
+Рисунок 219 (Проверка работы Кнопки CMZ700,CMZ500-Mod700 YOKOHAWA №2)
+
+Таблицы:
+Таблица обозначений схемы гирокомпаса Yokogawa CMZ900:
+No,PARTS NAME,PART NO.
+1,M.MAIN BD ASSY,V8123WB
+2,PHOTO SENSOR ASSY,V8114UQ
+3,TRANS ASSY,V8123TC
+4,BRUSH UNIT ASSY,V8114LP
+5,BELT,5T117G008-01
+6,STEPPING MORTER ASSY,V8114UR
+7,M.PWM INV BD ASSY,V8123WE
+8,M.PS BD ASSY,V8123WH
+9,SPACER,V8114LR
+10,SPACER,V8114LS
+11,NOISE FILTER,V8817BH
+12,M.TERMINAL BD ASSY,V8123WK
+13,CIRCUIT PROTECTOR,5T108F017-14
+14,l/F BOARD ASSY,V8114SG
+15,MM l/F ASSY,V8114SL
+16,SUPPORTING LIQUID,V8114ML
+17,CONTAINER,V8123DP
+18,DAMPER ASSY,V8123DQ
+19,GYRO SPHERE,MKT007
+20,DRAIN SCREW,V8114DH
+21,O RING (for Drain),V8005BE
+No,PARTS NAME,PART NO.
+22,FILTER KIT,V8817BF
+23,FAN ASSY,V8123GZ
+24,SCREW,V8813CZ
+25,CABLE ASSY,V8114UB
+26,O RING (for CENTER PIN),V8005BE
+27,CENTER PIN,V8123DA
+28,O RING (for CONTAINER),V8810QZ
+29,LONG NUT,V8123CS
+30,HOOK ASSY,V8123CL
+31,SEAL WASHER,V8810NE
+32,SCREW,Y9303LU
+33,TERMINAL (TB3),V8114VG
+34,CABLE ASSY,V8114UA
+35,CABLE ASSY,V8114UU
+36,CABLE ASSY,V8123GX
+37,SLIDE,1J124B038-04
+38,PLATE,1J355C497-01
+39,BRACKET,V8210NH
+40,BASE,V8801KV
+41,SPACER,V8114EZ
+42,BUSH,1J371D699-01
+
+
+Таблица обозначений схемы гирокомпаса Yokogawa CMZ700:
+№,Описание,DWG NO.
+1,Гиросфера (ЧЭ),KT005
+2,Поддерживающая жидкость,MKZ508
+3,Ртуть,V8109PN
+4,Изоляционная жидкость,V8109PT
+5,O-ring,V8005BE
+6,O-ring,V8114DQ
+7,Центральный вывод,V8114DV
+8,O-ring,V8005BE
+9,Резиновый изолятор,V8114FL
+10,Outer bellows,V8114FM
+11,Inner bellows,V8114FQ
+12,Universul joint,V8114FP
+13,Контейнер,V8114AC
+14,Шаговый двигатель,V8114UR
+15,Ремень,5T117G008-01
+16,PS1 Assy,V8114SS
+17,PS2 Assy,V8114Su
+18,Inverter Assy,V8114SW
+19,Main Assy,V8114SA
+20,Terminal Assy,V8114SY
+21,Transformer Assy,V8114UN
+22,Noise filter,A1I17EN
+23,Fan-motor Assy,V8114UM
+24,Circuit protecter,5T108F017-14
+25,Foto-senser Assy,V8114UQ
+26,Seal washer,V8109TW
+27,MM I/F Assy,V8114SL
+28,I/F board Assy,V8114SG
+29,Burush unit Assy,V8114LP
+
+
+Дополнительные изображения по вашему запросу:
+Рисунок 123 (Схема Yokogawa CMZ900)
+Рисунок 222 (Плата CMZ700,CMZ500-Mod700 YOKOHAWA №1)
+Рисунок 224 (Плата CMZ700,CMZ500-Mod700 YOKOHAWA №3)
+Рисунок 216 (Кнопки CMZ700,CMZ500-Mod700 YOKOHAWA)
+Рисунок 223 (Плата CMZ700,CMZ500-Mod700 YOKOHAWA №2)
+Рисунок 215 (Внутренности CMZ700,CMZ500-Mod700 YOKOHAWA)
+Рисунок 218 (Проверка работы Кнопки CMZ700,CMZ500-Mod700 YOKOHAWA №1)
+Рисунок 219 (Проверка работы Кнопки CMZ700,CMZ500-Mod700 YOKOHAWA №2)

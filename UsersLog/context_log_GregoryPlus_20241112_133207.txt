@@ -1,0 +1,258 @@
+Контекст для запроса от пользователя GregoryPlus:
+
+Выбрать SELF ID используя [▼] и [ENT] как на Рисунок 440 Рисунок 440 (Алгоритм смены MMSI у FURINO FM8800S №2) Последовательно нажать цифры пароля ( 652111 ) Станция издаст звуковой сигнал Нажмите ent и станция даст ввести новый MMSI Изменение УКВ ЦИВ Для изменения ЦИВ потребуется выполнить следующие действия: Снять защиту в меню System|Protect Для этого нужно выбрать “P” путём нажатия клавиши «Play» как на Рисунок 441, а после нажмите E Рисунок 441 (Значок плэй) Потребуется ввести пароль 652111 Выключить станцию Открыть нижнюю крышку как на Рисунок 442 Нажать кнопку S1, удерживать ее и включить станцию Рисунок 442 (Изменение УКВ ЦИВ №1) Выбрать команду Clear All Выключить станцию Включить в обычном режиме (без каких-либо зажатых кнопок) Зайти в меню System | ID как на Рисунок 443.
+
+Таблица всех паролей для оборудований (в том числе MMSI)
+
+Никаких надписей не должно появляться. Ввести JOB No.: ssas manager ; Password: ship security alert (обычный пароль) Когда запущен SSAS Manager Mode то должна мигать надпись SSAS Manager Mode сверху в центре экрана ВАЖНО В manager mode можно сменить пароль. Если вы не знаете пароль, то введите следующий пароль - wasuremashita+IMN. IMN - это номер IMN установленный в Setup - > System Setup (Например, если IMN номер 443256789, то наберите “wasuremashita+443256789”) Дополнительно: в случае, если вы вошли одновременно в SSAS Manager Mode и Furuno Service Mode, то в центре вверху будет надпись SSAS Manager Mode+S ОЧЕНЬ ВАЖНО!
+
+Рисунок 430 (дисплей SAILOR HC 4500 №1) Зайти в пункт OPTIONS Ввести пароль 1234 как на Рисунок 431 и Рисунок 432. Рисунок 431 (дисплей SAILOR HC 4500 №2) Рисунок 432 (дисплей SAILOR HC 4500 №3) Зайти в пункт DSC Зайти в пункт MMSI как на Рисунок 433 и Рисунок 434. Рисунок 433 (дисплей SAILOR HC 4500 №4) Рисунок 434 (дисплей SAILOR HC 4500 №5) Ввести номер MMSI и подтвердить клавишей ACCEPT Перезагрузить радиостанцию ПВ/КВ SAILOR 6006 программирование Программирование идентификатора терминала телексной связи Чтобы запрограммировать ответную строку на терминале Sailor 6006, сделайте следующее: В главном меню блока SAILOR 6006 выберите пункт System (Система) В нижней части страницы выберите Settings (Настройки) как на Рисунок 435 Рисунок 435 (Интерфейс программирования SAILOR 6006 №1) Выберите пункт Identification(Идентификация) и введите пароль 1234 Введите ответную строку и нажмите ОК как на Рисунок 436 и Рисунок 437 Рисунок 436 (Интерфейс программирования SAILOR 6006 №2) Рисунок 437 (Интерфейс программирования SAILOR 6006 №3) УКВ FURUNO FM8800S Алгоритм смены MMSI : Выключить УКВ Поставить перемычку в порт принтер между 2 и 15 Рисунок 438 (Алгоритм смены MMSI у FURINO FM8800S №1) Или между 25 и 26 если FM-8810 как на Рисунок 439 Рисунок 439 (Схема портов FM-8100) Включить питание и зажать [MENU].
+
+Примечание1: во время тестирования невозможно передать реальное сообщение ССОО Примечание2: для выполнения тестирования оборудование должно работать в режиме управления ССОО FELCOM-15/18 Нажмите кнопку [F7], чтобы открыть меню Options (Опции) Нажмите одну из следующих кнопок, чтобы открыть меню тестирования (Test) Рабочий режим Инмарсат-С: кнопка [7] FELCOM-18: кнопка [8] Рабочий режим приемник РГВ: кнопка [6] как на Рисунок 399 Рисунок 399 (Тестировани кнопки ССОО Felcom-15/18 №1) Нажмите кнопку[4] как на Рисунок 400 Рисунок 400 (Тестировани кнопки ССОО Felcom-15/18 №2) Нажмите [Enter], чтобы начать тестирование как на Рисунок 401 Рисунок 401 (Тестировани кнопки ССОО Felcom-15/18 №3) На экране отобразится (красное) сообщение “Distress/SSAS buttons are under test.
+
+Рисунок 257 (Вставленный штифт в гирокомпас)
+
+Если антенна не работает, то переписываем ее серийный номер и isn вручную и отправляем дистрибьютору. В ответ получаем STRING c набором цифр и букв, Подключаемся к антенне, из которой будем делать клон и вставляем эту строку. Далее антенна перезагрузится, после чего командой st -i проверяем что текущие серийный номер и isn соответствуют антенне, которую мы клонировали. Capsat Inmarsat-c сброс пароля Процедура сброса пароля в программе Capsat Включить станцию Сохранить себе все Контакты затитые в address book Нажать Ctrl+Alt+Del Станция выключится и при начале загрузки нажать ctrl+shift+R Станция попросит ввести пароль и повторить 2 раза - оставляем пустую строку (ничего не вводим) Появится окно выбора интерфейса - выбираем Capsat Терминал загружается и больше не имеет никаких паролей и адресов Вводим в address book сохранённые ранее адреса Примечание: Перекл раскладки с кириллицы на латиницу alt+f9 Настройка и тест Furuno Felcom 15\16\18\19 Отключение/подключение SSAS ic318 Необходимо выполните следующие команды: Нажмите F8 Выберите System setup Command Window Логин: furunoservice Пароль: Felcom15 или Felcom18 или Felcom19 в зависимости от модели станции Remote box В нём отключаете / подключаете кнопки IC-307.
+
+Не заполняем Ip адреса и пароли procup в мануале на неё Если капсула L3 то читать L3 reader 2.21 версия Пароль – 641170 Консоль Consilium VDR / SVDR изображена на Рисунок 91 (Консоль Consilium VDR / SVDR ) Комплектующие и внутренности Consilium VDR / SVDR изображены на Рисунок 92 (Комплектующие Consilium VDR / SVDR ) Рисунок 91 (Консоль Consilium VDR / SVDR ) M4 Вход Login: vdradmin Pass. : ayt16bmc (бывает consilium) Конфиг пароль: consilium IP: 192.168.5.120 main cab 192.168.5.250 capsule Рисунок 92 (Комплектующие Consilium VDR / SVDR) VDR Kelvin Hughes А5 Примечание: до отъезда с борта, пришлите отчет для проверки.
+
+Рисунок 399 (Тестировани кнопки ССОО Felcom-15/18 №1)
+
+Тестирование может занять до 1 часу времени и по завершению надпись «F1: SSAS test off» в окне SAT изменится на «F1: SSAS test on». Далее выйти из этого окна в главное меню. Необходимо сделать тест тревожной кнопки, для этого при активном экране станции JUE-85 необходимо нажать Alt+A для вывода меню Diagnostics, в открывшемся окне нажать Ctrl+F10, ввести пароль 0000 и нажать ENTER. В окне Diagnostics нажать пункт Security Button Test для активации режима тестирования кнопки, после чего появится окно Security Button Test Mode с надписью Security Button Are Under Test Now…
+
+Таблицы:
+Таблица всех паролей для оборудований (в том числе MMSI):
+Brand,Type of equipment,"Password or Procedures (Полностью отправлять, ничего не вырезать!)",Extra info.
+Consilium,F1 S1 F2,"«http://10.2.1.10:8080/config/ consilium
+consilium»","10.2.1.222
+255.255.255.0"
+Consilium,M2-M3.5,"«Preference password: 701164
+192.168.5.150
+Connect to PDU: \\192.168.5.250\data vdradmin или \\192.168.5.250\data backup vdradmin или \\192.168.5.250\backup
+Use “vdrmapping M35” 
+Username: vdruser 
+Password: 641170
+Service password: 701164, 641170, Consilium Crew password: crew
+Override password: Use 709223A0 password generator» - Это все один большой пароль (отпраить полностью)","192.168.5.10
+
+255.255.255.0"
+Consilium,M4,"«Рабочий стол: 192.168.5.120
+User: vdradmin
+Password: ayt16bmc
+Пароль для опции Preference:
+Сonsilium, 701164
+L3HVR: L3HVR
+PDU 192.168.5.250» Это все один большой пароль (отправить полностью)","192.168.5.10
+255.255.255.0"
+COBHAM,AIS 6282,"User - user 0000 1234 
+Admin - sailorsailor 
+Factory reser PSWD - 12345",
+Highlander,A(S)-2 VDR,Highlander,
+Highlander,B(S)-2 VDR,«\\172.16.0.250\data vdradmin Highlander»,"172.16.0.110
+255.255.255.0"
+Highlander,VDR600 VDR,admin,"172.16.8.175
+255.255.255.0"
+Headway,HMT-100,,"192.168.0.32
+255.255.255.0"
+DANELEC SPERRY,VDR,"«10.0.0.100
+svdrsuper
+danelec..
+
+Пароли VDR Explorer
+- Master (dsvdr..)
+- Guest
+- Audio (44blokken)» это все один пароль","10.0.0.101
+255.255.255.0"
+Debeg,AIS,SAIS,
+Decca,Bridgemaster E,118BH,
+Decca,Bridgemaster 2,"«EBL 247 ### of (10 enter,11 enter en 12
+enter)» это все один пароль",
+Furuno,FM-8500 & DSC6A (Clear Ram/Rom/all no need press switch inside,652111,
+Furuno,FM-8800 MMSI & Output power,"Jumper between #2 and #15 printer port. Turn
+on unit press [menu] system [ent] press 652111 [ent]","/14,15	24,25\
+/1,2,3,4,5	12,13\
+Pin layout sub-D 25"
+Furuno,DSC-60,652111 [enter],
+Furuno,FS-1562,1562,
+Furuno,FS-1570,Switch ON unit and press switch on CPU board an the screen menu appears press:652111 ent.,
+Furuno,DP5/6,"""lockkey"" DP5 ""[enter]""",
+Furuno,DP5/6,"«Press F5: station, option 5: capslock on and type: ANSWER CODE» это все один пароль",
+Furuno,DP5/6,ID code,
+Furuno,Felcom-15 and 16,«Job: furunoservice password: felcom15 felcom16» это все один пароль,
+Furuno,Felcom-15 clear RAM & IMN,Job: clr ram IMN [ALT +IMN],
+Furuno,Felcom-15 and 16 SSAS default,«SSAS manager ship security alert» это все один пароль,rhgservice
+Furuno,Felcom-15 and 16,wasuremashita+IMN,if SSAS manager mode cannot be unlocked
+Furuno,Felcom-80 telex a/b,ANSWER,
+Furuno,Felcom-80 change tel/fax numbers and setting,Switch on at CPU 2 SW2-2,
+Furuno,Felcom-81 change tel/fax numbers and setting,«Job: furunoservice password: felcom81» это все один пароль,
+Furuno,Felcom-81 clear ram,Job: CLR RAM password: 3504,
+Furuno,Felcom-81 manual control,Job: furunomanual password: 3504,
+Furuno,Felcom-82 Clear RAM,Job: CLR RAM password: denpa4,
+Furuno,Felcom-82,Job: furunoservice password: felcom82,
+Furuno,FA-100,switch ON with 0 pressed then 652111,
+Furuno,FA-150,[Menu][ent][disp][DIM][NAV][STATUS][MENU],
+Furuno,VR-3000 VR-5000,vr3000super nopassword,
+Furuno,VR-7000,"Логин - Serviceman
+Пароль - Nopassword652111 nopassword","172.31.16.201-219
+255.255.255.0"
+Furuno,Fleet 77 [owner level],1234567890,
+Furuno,FR15**,"«OFF en ON whilst holding GAIN button pressed then 0,0, INSTALL» это все один пароль",
+Furuno,Several radars,Keep HL pressed while pressing 5 times menu,
+Furuno,FMD-3100,"voyager2
+voyager2",
+Jotron,"TR2500
+password 1",OP,
+Jotron,"TR2500
+password 2",SE,
+JRC,VDR JCY-1800,jrcvdr,"192.168.110.200
+255.255.255.0"
+JRC,JSS-2150,"«DIM+PWR/CONT(SLEEP MODE) HOLD
+MENU+PWR/CONT» это все один пароль",F1 CHANGE MMSI
+JRC,JHS-31,"«jumper in CMN-244. Power ON. * + ENT, Initialize OFF, .(period) initialize ON» это все один пароль",
+JRC,JHS-32A/B,dipswitch 1-1 ON,
+JRC,JHS-800S,6926,
+JRC,JSS-7XX and 8XX (MMSI),restore link W1 on DSC PCB,
+JRC,"JSS-7XX and
+8XX (A/B)",restore link W1 on NBDP PCB,
+JRC,"JSS-8XX
+(power)",.800#,
+JRC,"JAN-3598
+maintenance",The keys [guard] + [C] (CLR),
+JRC,"JAN-3598
+maintenance",nihonmusen,
+JRC,"JAN-701/901
+M/B maintenance",85100,
+JRC,"JAN-701/901
+M/B windows",59631,
+JRC,JUE-75A,[alt]+[FN]+[HOME],
+JRC,JUE-75C,[FUNC] [CNTRL]{←],
+JRC,JHS-180,«User 0000 fixed password 0180» это все один пароль,
+JRC,JHS-182,«User 0000 fixed password 0182» это все один пароль,
+JRC,JCY-1000,User Administrator password vdr,
+JRC,JCY-1700,Jrcvdr senjyou/koujyou,
+JRC,JCY-1800,"JCY-18XX Maintenance software
+jrcvdr","192.168.110.200
+255.255.255.0"
+JRC,"NWZ 4570
+special menu",AUX ↑ ← 1 0 ENT,
+JRC,"NWZ 4570
+memory clr",Turn ON holding [1] key,
+JRC,"JSB-196
+extended menu DSC Modem NCT-196N","Turn ON holding [menu] key
+Set dipSw. 3 in top, Turn ON holding [menu] key",
+JRC,JMA-5300,"53001
+530054 0 settings press radar menu",
+JRC,"JMA-9800
+JMA-9900",98001,
+JRC,JMA-9100,0;91001; factory pw: 910091/910092,
+JRC,JLR-7700,← and switch ON for English,
+JRC,JUE-410F,user: JRC pasword 9998,
+JRC,JCY-152,"«default: 9999; Node setting: 1234;
+maintenance: 9275» это все один пароль",
+Kongsber g,Seatex 100,AIS (upper case),
+L3,,Admin = L3AIS & User = L3USR,
+Nauticast,,NAUT,
+Naval,Navsat 90/120,Mats (alleen settings),
+Naval,Navsat 90/120,JEH (alles),
+Netwave,NW4000,"192.168.2.50
+NW220654 nw220654",автоматически
+Nera,Worldphone,1234,
+Nera,,owner 123456,
+Nera,,technisch 753951,
+Nera,"Fleet 77 [owner
+level]",1234567890,
+NSR,NVX-1000,↑ ↑ ↑ ↑ ↑ ↑ ↑ ↑(8 times key up),
+NSR,NGR-1000,↑ ↑ ↑ ↑ ↑ ↑ ↑ ↑(8 times key up),
+NSR,NBW-1000,↑ ↑ ↑ ↑ ↑ ↑ ↑ ↑(8 times key up),
+NSR,NVR-1000,777777,
+NSR,NES-20XX,456123,
+NSR,NSI-1000,77777777,
+NSR,NGR-3000,77777777 or 66733733,
+NSR,NVR-9000,,
+NSR,"Configuration
+software","User name: NSR
+Password: 123",
+NSR,"LRU/FFC/FPC
+direct
+access to files",User name: admin Password: 123,
+NSR,MCU upgrade ACU upgrade,User name: update Password: 123456,
+NSR,RAU,77777777 or 66733733,
+Ross,VHF DSC 500,9874123654 clear mode,
+Rutter,100G2 G3,"«Computer: 200.200.200.200
+MyUser/Rutter Administrator/323Vdr+ Playback/Vdr Watchdog/VDRVDR
+WORKGROUP/ VDR» это все один пароль","200.200.200.150
+255.255.255.0"
+"S.P.
+Radio",RM2150/51,initialization S1-4,
+"S.P.
+Radio",RM2150/51,service mode S2-4 / st -operator,
+"S.P.
+Radio",SP 1600M,70663,
+"S.P.
+Radio",HF compact 4000,dipswitch S1 on PCB 717 1234,
+"S.P.
+Radio",UAIS 1800,0,
+"S.P.
+Radio",UAIS 1900,SAIS (upper case),
+"S.P.
+Radio",Sailor Fleet,service (12345678),
+"S.P.
+Radio","DT4646E =
+DT3606E",taspac (BIOS),
+SAAB,R3 AIS,admin,
+SAAB,R4 AIS,for shipdetails : user; others : admin,
+SAAB,R4 DGPS,«Changing locked settings. Go to the menu item with the Padlock and press following number: 157255 (nothing changes until all pressed)» Это все один большой пароль (отправить полностью),
+SAIT,XH5140,00000 / 99999,
+SAIT,XH5141,21223122 then 2 x prog key,
+SAM,radar 1000,sr1000 or $$ or sr,
+SAM,radar 1100,sr1000 or $$ or sr,
+Saracom,RH-20,763,
+servowatc h,,eagle,
+Shipmate,RS8400,Make jumper connection on PCB in the middle,
+Skanti,DSC 3000,741573,
+Skanti,DSC 9000,741573,
+Skanti,PC 9000,ECI / skanti / itnaks,
+Skanti,TRP 8000,278,
+Standard Radio,"STR2000
+sellcall No and A/B",FUZZ (edit c:\str2000\rdta\rcom.ini,
+Standard Radio,STR2000 MMSI,FUZZ (edit c:\str2000\GDTA\gmdss.ini,
+Standard Radio,STR2000 BIOS,NIT,
+Thrane & Thrane,TT3606E,BIOS ww taspac,
+Thrane & Thrane,TT3064A,simcard default 0000 or 1234,
+Thrane & Thrane,TT3000,"su sysadm, su distb, su normal",
+Thrane & Thrane,RT5022,S5000ACC (access extended settings met LAN),
+Thrane & Thrane,distributor password,contact T&T website for ticket,
+Thrane & Thrane,"6200
+6222","12345
+Web interface user: admin Passw: techuser user: admin, passw:sailorsailor",
+Thrane & Thrane,RT4822,SHIFT+FUNC+USER+VERSION,
+Transas,Navi-sailor 3000/4000,Transas Integrator: avlad,
+Trimble,Sentinel,BREZEL,
+Trimble,"Sentinel
+technical menu",112831BD,
+Trimble,Sentinel password lost,218526512LEZERB,
+"Yokogaw
+a",CMZ 700,"maintenance 33333, reset RH 77777, erase
+all 99999, generation mode 44444",
+Yokogaw a,PT500A,Operation mode/rate radius/speed/rudder limit,
+"Yokogaw
+a",PT500D,"rudder limit/rudder limit/offcrs alarm/rudder
+limit",
+"Yokogaw
+a",CMZ 300,"dipswitch 1 ON, C8, 40024, 0E (8x) 0",
+"Yokogaw
+a",CMZ 500 type 2,"34E, 7102",
+Yokogaw a,CMZ 500 type 3,"34E, 70102",
+Yokogaw a,CMZ 900,"maintenance 3000
+reset RH 34444
+Log reset 35555
+Init backup memory 36666 generate 40000",
+
+
+Дополнительные изображения по вашему запросу:
+Выбрать SELF ID используя [▼] и [ENT] как на Рисунок 440 Рисунок 440 (Алгоритм смены MMSI у FURINO FM8800S №2) Последовательно нажать цифры пароля ( 652111 ) Станция издаст звуковой сигнал Нажмите ent и станция даст ввести новый MMSI Изменение УКВ ЦИВ Для изменения ЦИВ потребуется выполнить следующие действия: Снять защиту в меню System|Protect Для этого нужно выбрать “P” путём нажатия клавиши «Play» как на Рисунок 441, а после нажмите E Рисунок 441 (Значок плэй) Потребуется ввести пароль 652111 Выключить станцию Открыть нижнюю крышку как на Рисунок 442 Нажать кнопку S1, удерживать ее и включить станцию Рисунок 442 (Изменение УКВ ЦИВ №1) Выбрать команду Clear All Выключить станцию Включить в обычном режиме (без каких-либо зажатых кнопок) Зайти в меню System | ID как на Рисунок 443.
+Рисунок 430 (дисплей SAILOR HC 4500 №1) Зайти в пункт OPTIONS Ввести пароль 1234 как на Рисунок 431 и Рисунок 432. Рисунок 431 (дисплей SAILOR HC 4500 №2) Рисунок 432 (дисплей SAILOR HC 4500 №3) Зайти в пункт DSC Зайти в пункт MMSI как на Рисунок 433 и Рисунок 434. Рисунок 433 (дисплей SAILOR HC 4500 №4) Рисунок 434 (дисплей SAILOR HC 4500 №5) Ввести номер MMSI и подтвердить клавишей ACCEPT Перезагрузить радиостанцию ПВ/КВ SAILOR 6006 программирование Программирование идентификатора терминала телексной связи Чтобы запрограммировать ответную строку на терминале Sailor 6006, сделайте следующее: В главном меню блока SAILOR 6006 выберите пункт System (Система) В нижней части страницы выберите Settings (Настройки) как на Рисунок 435 Рисунок 435 (Интерфейс программирования SAILOR 6006 №1) Выберите пункт Identification(Идентификация) и введите пароль 1234 Введите ответную строку и нажмите ОК как на Рисунок 436 и Рисунок 437 Рисунок 436 (Интерфейс программирования SAILOR 6006 №2) Рисунок 437 (Интерфейс программирования SAILOR 6006 №3) УКВ FURUNO FM8800S Алгоритм смены MMSI : Выключить УКВ Поставить перемычку в порт принтер между 2 и 15 Рисунок 438 (Алгоритм смены MMSI у FURINO FM8800S №1) Или между 25 и 26 если FM-8810 как на Рисунок 439 Рисунок 439 (Схема портов FM-8100) Включить питание и зажать [MENU].
+Примечание1: во время тестирования невозможно передать реальное сообщение ССОО Примечание2: для выполнения тестирования оборудование должно работать в режиме управления ССОО FELCOM-15/18 Нажмите кнопку [F7], чтобы открыть меню Options (Опции) Нажмите одну из следующих кнопок, чтобы открыть меню тестирования (Test) Рабочий режим Инмарсат-С: кнопка [7] FELCOM-18: кнопка [8] Рабочий режим приемник РГВ: кнопка [6] как на Рисунок 399 Рисунок 399 (Тестировани кнопки ССОО Felcom-15/18 №1) Нажмите кнопку[4] как на Рисунок 400 Рисунок 400 (Тестировани кнопки ССОО Felcom-15/18 №2) Нажмите [Enter], чтобы начать тестирование как на Рисунок 401 Рисунок 401 (Тестировани кнопки ССОО Felcom-15/18 №3) На экране отобразится (красное) сообщение “Distress/SSAS buttons are under test.
+Рисунок 257 (Вставленный штифт в гирокомпас)
+Не заполняем Ip адреса и пароли procup в мануале на неё Если капсула L3 то читать L3 reader 2.21 версия Пароль – 641170 Консоль Consilium VDR / SVDR изображена на Рисунок 91 (Консоль Consilium VDR / SVDR ) Комплектующие и внутренности Consilium VDR / SVDR изображены на Рисунок 92 (Комплектующие Consilium VDR / SVDR ) Рисунок 91 (Консоль Consilium VDR / SVDR ) M4 Вход Login: vdradmin Pass. : ayt16bmc (бывает consilium) Конфиг пароль: consilium IP: 192.168.5.120 main cab 192.168.5.250 capsule Рисунок 92 (Комплектующие Consilium VDR / SVDR) VDR Kelvin Hughes А5 Примечание: до отъезда с борта, пришлите отчет для проверки.
+Рисунок 399 (Тестировани кнопки ССОО Felcom-15/18 №1)
