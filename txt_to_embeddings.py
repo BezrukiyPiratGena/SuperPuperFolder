@@ -67,6 +67,7 @@ if not utility.has_collection(collection_name):
         FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
         FieldSchema(name="reference", dtype=DataType.VARCHAR, max_length=65535),
         FieldSchema(name="figure_id", dtype=DataType.VARCHAR, max_length=100),
+        FieldSchema(name="related_table", dtype=DataType.VARCHAR, max_length=65535),
     ]
     schema = CollectionSchema(fields, description="Коллекция для хранения данных")
     collection = Collection(name=collection_name, schema=schema)
@@ -152,7 +153,12 @@ def extract_content_from_word(word_path, bucket_name):
                     save_table_to_minio(bucket_name, table_name, current_table_data)
                     explanation = current_text_block[-1] if current_text_block else ""
                     text_blocks_with_refs.append(
-                        {"text": explanation, "reference": table_name, "figure_id": ""}
+                        {
+                            "text": explanation,
+                            "reference": table_name,
+                            "figure_id": "",
+                            "related_table": "",
+                        }
                     )
                     current_table_data = []  # Сброс текущих данных таблицы
                     table_counter += 1
@@ -209,10 +215,11 @@ def extract_content_from_word(word_path, bucket_name):
                                         "text": text_after_image,
                                         "reference": image_name,
                                         "figure_id": figure_id,
+                                        "related_table": table_name,  # Указываем таблицу, из которой взято изображение
                                     }
                                 )
                                 print(
-                                    f"Изображение {image_name} загружено с описанием: {text_after_image}, figure_id: {figure_id}"
+                                    f"Изображение {image_name} загружено с описанием: {text_after_image}, figure_id: {figure_id}, related_table: {table_name}"
                                 )
                                 image_counter += 1
             last_was_table = True
@@ -257,6 +264,7 @@ def extract_content_from_word(word_path, bucket_name):
                         "text": text_after_image,
                         "reference": image_name,
                         "figure_id": figure_id,
+                        "related_table": "",  # Поле остаётся пустым
                     }
                 )
                 print(
@@ -279,7 +287,7 @@ def process_content_from_word(word_path, bucket_name):
             if embedding is None:
                 continue
             embedding_np = np.array(embedding, dtype=np.float32).tolist()
-            data = [[embedding_np], [block], [""], [""]]
+            data = [[embedding_np], [block], [""], [""], [""]]
             collection.insert(data)
             successful_embeddings_count += 1
             print(
@@ -292,12 +300,13 @@ def process_content_from_word(word_path, bucket_name):
         text = ref_info["text"]
         reference = ref_info["reference"]
         figure_id = ref_info["figure_id"]
+        related_table = ref_info["related_table"]
         if text and text.strip():  # Проверка, чтобы текст описания не был пустым
             embedding = create_embeddings(text)
             if embedding is None:
                 continue
             embedding_np = np.array(embedding, dtype=np.float32).tolist()
-            data = [[embedding_np], [text], [reference], [figure_id]]
+            data = [[embedding_np], [text], [reference], [figure_id], [related_table]]
             collection.insert(data)
             successful_embeddings_count += 1
             print(f"Эмбеддинг и пояснение успешно добавлены для объекта: {reference}")

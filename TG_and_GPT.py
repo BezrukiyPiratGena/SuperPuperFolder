@@ -105,7 +105,7 @@ def create_embedding_for_query(query):
 
 
 # Поиск наиболее релевантных эмбеддингов
-def find_most_similar(query_embedding, top_n=10):
+def find_most_similar(query_embedding, top_n=15):
     query_embedding_np = np.array([query_embedding], dtype=np.float32)
     similarities = np.dot(all_embeddings, query_embedding_np.T)
     most_similar_indices = np.argsort(similarities, axis=0)[::-1][:top_n]
@@ -165,6 +165,27 @@ from telegram import InputMediaPhoto
 user_image_context = {}
 
 
+def filter_and_prioritize_context(most_similar_texts, most_similar_refs):
+    texts_and_tables = []
+    images = []
+
+    # Разделяем объекты на тексты/таблицы и изображения
+    for i, ref in enumerate(most_similar_refs):
+        if ref.endswith(".csv") or not re.search(r"Рисунок \d+", most_similar_texts[i]):
+            texts_and_tables.append((most_similar_texts[i], ref))
+        else:
+            images.append((most_similar_texts[i], ref))
+
+    # Ограничиваем количество текстов и таблиц до 10
+    prioritized_texts_and_tables = texts_and_tables[:10]
+
+    # Ограничиваем количество изображений до 10
+    prioritized_images = images[:10]
+
+    # Возвращаем два отдельных списка
+    return prioritized_texts_and_tables, prioritized_images
+
+
 async def handle_message(update: Update, context):
     user_id = update.message.from_user.id
     user_message = update.message.text
@@ -187,11 +208,20 @@ async def handle_message(update: Update, context):
 
         query_embedding = create_embedding_for_query(user_message)
         most_similar_texts, most_similar_refs = find_most_similar(query_embedding)
-        context_text = "\n\n".join(most_similar_texts)
 
-        # Добавляем дополнительный контекст, если он найден
-        if extra_figure_context:
-            context_text = f"{extra_figure_context}\n\n{context_text}"
+        # Фильтруем и приоритизируем контекст
+        prioritized_texts_and_tables, prioritized_images = (
+            filter_and_prioritize_context(most_similar_texts, most_similar_refs)
+        )
+
+        # Формируем текст контекста из текстов и таблиц
+        context_text = "\n\n".join([obj[0] for obj in prioritized_texts_and_tables])
+
+        # Добавляем изображения в контекст (если есть)
+        if prioritized_images:
+            context_text += "\n\nРисунки:\n" + "\n".join(
+                [f"{img[0]} ({img[1]})" for img in prioritized_images]
+            )
 
         table_contexts = []
         images_to_mention = []
