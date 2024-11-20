@@ -1,0 +1,248 @@
+Контекст для запроса от пользователя GregoryPlus:
+
+
+
+Рисунки:
+Рисунок 62 (АКБ Delta HR12-5) (image_45.jpeg)
+
+Рисунок 62 (АКБ Delta HR12-5):
+Consilium M2/M3/M3.5/M4/F1/S1,Consilium M2/M3/M3.5/M4/F1/S1,Consilium M2/M3/M3.5/M4/F1/S1,Consilium M2/M3/M3.5/M4/F1/S1,Consilium M2/M3/M3.5/M4/F1/S1,Consilium M2/M3/M3.5/M4/F1/S1,Consilium M2/M3/M3.5/M4/F1/S1
+Маяк,Маяк,Cрок эксплу- атации,Cрок службы батареи,Период работы,Напря- жение,Фото
+Novega PT9 C-proof,Novega PT9 C-proof,6 лет,3 года,30 дней,2.5 В и более,Рисунок 18 (Батарейка для Novega PT9 C-proof)
+Dukane DKM120 series,Dukane DKM120 series,6 лет,6 лет,30 дней,CODE A: 3.55 В,Рисунок 19 (Батарейка для Dukane DKM120 series)
+Dukane DKM500 series,Dukane DKM500 series,6 лет,6 лет,30 дней,"CODE BCD:
+2.97 В",Рисунок 20 (Батарейка для Dukane DKM500 series)
+Consilium F2 Capsule Procap 32 Gb,Consilium F2 Capsule Procap 32 Gb,Consilium F2 Capsule Procap 32 Gb,Consilium F2 Capsule Procap 32 Gb,Consilium F2 Capsule Procap 32 Gb,Consilium F2 Capsule Procap 32 Gb,Consilium F2 Capsule Procap 32 Gb
+Novega PT9 NINETY,Novega PT9 NINETY,6 лет,3 года,90 дней,"Для маяков с сер. номером: #18717-00- 30001~30335:
+2.5-3.6 В",Рисунок 21 (Батарейка для Novega PT9 NINETY)
+Novega PT9 NINETY,Novega PT9 NINETY,6 лет,3 года,90 дней,"Для маяков с сер. номером: #18717-00-
+30336
+и выше:
+3.2 В",Рисунок 21 (Батарейка для Novega PT9 NINETY)
+Highlander (все типы) с 1 мая 2019 года,Highlander (все типы) с 1 мая 2019 года,Highlander (все типы) с 1 мая 2019 года,Highlander (все типы) с 1 мая 2019 года,Highlander (все типы) с 1 мая 2019 года,Highlander (все типы) с 1 мая 2019 года,Highlander (все типы) с 1 мая 2019 года
+"Acoustic Beacon HLD- ULD601
+Part Number: 260500403C0","Acoustic Beacon HLD- ULD601
+Part Number: 260500403C0",6 лет,3 года,90 дней,3.2 В и более,Рисунок 22 (Батарейка для Acoustic Beacon HLD- ULD601)
+Furuno VR-5000/VR-3000/VR-3000S,Furuno VR-5000/VR-3000/VR-3000S,Furuno VR-5000/VR-3000/VR-3000S,Furuno VR-5000/VR-3000/VR-3000S,Furuno VR-5000/VR-3000/VR-3000S,Furuno VR-5000/VR-3000/VR-3000S,Furuno VR-5000/VR-3000/VR-3000S
+Dukane DK120,6 лет,6 лет,6 лет,30 дней,"CODE A: 3.55 В
+CODE BCD:
+2.97 В",Рисунок 23 (Батарейка для Dukane DK120)
+Novega PT9 NINETY,6 лет,6 лет,3 года,90 дней,"Для маяков с сер. номером: #18717-00- 30001~30335:
+2.5-3.6 В",Рисунок 24 (Батарейка для Novega PT9 NINETY)
+Novega PT9 NINETY,6 лет,6 лет,3 года,90 дней,"Для маяков с сер. номером: #18717-00-
+30336 и выше:
+3.2 В",Рисунок 24 (Батарейка для Novega PT9 NINETY)
+Маяк,"Cрок
+эксплу- атации","Cрок
+эксплу- атации","Cрок
+службы батареи","Cрок
+службы батареи",Период работы,Период работы,Напряжение,Напряжение,Фото,Фото
+Dukane DKM502,5 лет,5 лет,5 лет,5 лет,30 дней,30 дней,2.8 В и более,2.8 В и более,Рисунок 25 (Батарейка для Dukane DKM502),Рисунок 25 (Батарейка для Dukane DKM502)
+Dukane DKM502/90,6 лет,6 лет,3 года,3 года,90 дней,90 дней,2.8 В и более,2.8 В и более,Рисунок 26 (Батарейка для Dukane DKM502/90),Рисунок 26 (Батарейка для Dukane DKM502/90)
+Dukane/RJ E ELP-362M,7 лет,7 лет,7 лет,7 лет,30 дней,30 дней,6 В и более,6 В и более,Рисунок 27 (Батарейка для Dukane/RJ E ELP-362M),Рисунок 27 (Батарейка для Dukane/RJ E ELP-362M)
+Dukane/RJE ELP-362M9 0,7 лет,7 лет,7 лет,7 лет,90 дней,90 дней,6 В и более,6 В и более,Рисунок 28 (Батарейка для Dukane/RJE ELP-362M9 0),Рисунок 28 (Батарейка для Dukane/RJE ELP-362M9 0)
+Novega/ NetWave PT9 C-proof,6 лет,6 лет,3 года,3 года,30 дней,30 дней,2.5 В и более,2.5 В и более,Рисунок 29 (Батарейка для Novega/ NetWave PT9 C-proof),Рисунок 29 (Батарейка для Novega/ NetWave PT9 C-proof)
+Baway BC90,,,3 года,3 года,90 дней,90 дней,3.0 В и более,3.0 В и более,,
+Furuno VR-7000/VR-7000S,Furuno VR-7000/VR-7000S,Furuno VR-7000/VR-7000S,Furuno VR-7000/VR-7000S,Furuno VR-7000/VR-7000S,Furuno VR-7000/VR-7000S,Furuno VR-7000/VR-7000S,Furuno VR-7000/VR-7000S,Furuno VR-7000/VR-7000S,Furuno VR-7000/VR-7000S,Furuno VR-7000/VR-7000S
+Novega PT9 NINETY,6 лет,6 лет,3 года,3 года,90 дней,90 дней,"Для маяков с сер. номером: #18717-00- 30001~30335:
+2.5-3.6 В","Для маяков с сер. номером: #18717-00- 30001~30335:
+2.5-3.6 В",Рисунок 30 (Батарейка для Novega PT9 NINETY),Рисунок 30 (Батарейка для Novega PT9 NINETY)
+Novega PT9 NINETY,6 лет,6 лет,3 года,3 года,90 дней,90 дней,"Для маяков с сер. номером: #18717-00-
+30336 и выше:
+3.2 В","Для маяков с сер. номером: #18717-00-
+30336 и выше:
+3.2 В",Рисунок 30 (Батарейка для Novega PT9 NINETY),Рисунок 30 (Батарейка для Novega PT9 NINETY)
+Dukane DKM502/90,6 лет,6 лет,3 года,3 года,90 дней,90 дней,2.8 В и более,2.8 В и более,Рисунок 31 (Батарейка для Dukane DKM502/90),Рисунок 31 (Батарейка для Dukane DKM502/90)
+Dukane/RJE ELP-362M9 0,7 лет,7 лет,7 лет,7 лет,90 дней,90 дней,6 В и более,6 В и более,Рисунок 32 (Батарейка для Dukane/RJE ELP-362M9 0),Рисунок 32 (Батарейка для Dukane/RJE ELP-362M9 0)
+Baway BC90,,,3 года,3 года,90 дней,90 дней,3.0 В и более,3.0 В и более,Рисунок 33 (Батарейка для Baway BC90),Рисунок 33 (Батарейка для Baway BC90)
+Danelec DM200-500 VDR и S-VDR,Danelec DM200-500 VDR и S-VDR,Danelec DM200-500 VDR и S-VDR,Danelec DM200-500 VDR и S-VDR,Danelec DM200-500 VDR и S-VDR,Danelec DM200-500 VDR и S-VDR,Danelec DM200-500 VDR и S-VDR,Danelec DM200-500 VDR и S-VDR,Danelec DM200-500 VDR и S-VDR,Danelec DM200-500 VDR и S-VDR,Danelec DM200-500 VDR и S-VDR
+Teledyne benthos ELPD 362D,6 лет,6 лет,6 лет,6 лет,30 дней,30 дней,,,Рисунок 34 (Батарейка для Teledyne benthos ELPD 362D),Рисунок 34 (Батарейка для Teledyne benthos ELPD 362D)
+Danelec DM300-500 VDR и S-VDR,Danelec DM300-500 VDR и S-VDR,Danelec DM300-500 VDR и S-VDR,Danelec DM300-500 VDR и S-VDR,Danelec DM300-500 VDR и S-VDR,Danelec DM300-500 VDR и S-VDR,Danelec DM300-500 VDR и S-VDR,Danelec DM300-500 VDR и S-VDR,Danelec DM300-500 VDR и S-VDR,Danelec DM300-500 VDR и S-VDR,Danelec DM300-500 VDR и S-VDR
+Dukane DK120,6 лет,6 лет,6 лет,6 лет,30 дней,30 дней,"CODE A: 3.55 В
+CODE BCD:
+2.97 В","CODE A: 3.55 В
+CODE BCD:
+2.97 В",Рисунок 35 (Батарейка для Dukane DK120),Рисунок 35 (Батарейка для Dukane DK120)
+Danelec (все типы VDR и S-VDR),Danelec (все типы VDR и S-VDR),Danelec (все типы VDR и S-VDR),Danelec (все типы VDR и S-VDR),Danelec (все типы VDR и S-VDR),Danelec (все типы VDR и S-VDR),Danelec (все типы VDR и S-VDR),Danelec (все типы VDR и S-VDR),Danelec (все типы VDR и S-VDR),Danelec (все типы VDR и S-VDR),Danelec (все типы VDR и S-VDR)
+Danelec AUB- 90,6 лет,6 лет,3 года,3 года,90 дней,90 дней,,,Рисунок 36 (Батарейка для Danelec AUB- 90),Рисунок 36 (Батарейка для Danelec AUB- 90)
+"JRC JCY-1000, JCY-1700, JCY-1800/1850","JRC JCY-1000, JCY-1700, JCY-1800/1850","JRC JCY-1000, JCY-1700, JCY-1800/1850","JRC JCY-1000, JCY-1700, JCY-1800/1850","JRC JCY-1000, JCY-1700, JCY-1800/1850","JRC JCY-1000, JCY-1700, JCY-1800/1850","JRC JCY-1000, JCY-1700, JCY-1800/1850","JRC JCY-1000, JCY-1700, JCY-1800/1850","JRC JCY-1000, JCY-1700, JCY-1800/1850","JRC JCY-1000, JCY-1700, JCY-1800/1850","JRC JCY-1000, JCY-1700, JCY-1800/1850"
+Dukane DK120_DK480,Dukane DK120_DK480,6 лет,6 лет,6 лет,6 лет,30 дней,30 дней,"для маяка с кодом CODE A: 3.55 В
+для маяка с
+кодом CODE BCD: 2.97 В","для маяка с кодом CODE A: 3.55 В
+для маяка с
+кодом CODE BCD: 2.97 В",Рисунок 37 (Батарейка для Dukane DK120_DK480)
+Novega PT9 C- proof,Novega PT9 C- proof,6 лет,6 лет,3 года,3 года,30 дней,30 дней,2.5 В и более,2.5 В и более,Рисунок 38 (Батарейка для Novega PT9 C- proof)
+JRC JCY-1900/1950,JRC JCY-1900/1950,JRC JCY-1900/1950,JRC JCY-1900/1950,JRC JCY-1900/1950,JRC JCY-1900/1950,JRC JCY-1900/1950,JRC JCY-1900/1950,JRC JCY-1900/1950,JRC JCY-1900/1950,JRC JCY-1900/1950
+Novega PT9 NINETY,Novega PT9 NINETY,6 лет,6 лет,3 года,3 года,90 дней,90 дней,"Для маяков с сер. номером: #18717-00- 30001~30335:
+2.5-3.6 В
+Для маяков с сер. номером: #18717-00-
+30336 и выше:
+3.2 В","Для маяков с сер. номером: #18717-00- 30001~30335:
+2.5-3.6 В
+Для маяков с сер. номером: #18717-00-
+30336 и выше:
+3.2 В",Рисунок 39 (Батарейка для Novega PT9 NINETY)
+HEADWAY HMT-100,HEADWAY HMT-100,HEADWAY HMT-100,HEADWAY HMT-100,HEADWAY HMT-100,HEADWAY HMT-100,HEADWAY HMT-100,HEADWAY HMT-100,HEADWAY HMT-100,HEADWAY HMT-100,HEADWAY HMT-100
+Novega PT9 C- proof,Novega PT9 C- proof,6 лет,6 лет,3 года,3 года,30 дней,30 дней,2.5 В и более,2.5 В и более,Рисунок 40 (Батарейка для Novega PT9 C- proof)
+Dukane DK120_DK480,Dukane DK120_DK480,6 лет,6 лет,6 лет,6 лет,30 дней,30 дней,"для маяка с кодом CODE A: 3.55 В
+для маяка с кодом CODE BCD: 2.97 В","для маяка с кодом CODE A: 3.55 В
+для маяка с кодом CODE BCD: 2.97 В",Рисунок 41 (Батарейка для Dukane DK120_DK480)
+KELVIN HUGES MantaDigital VDR,KELVIN HUGES MantaDigital VDR,KELVIN HUGES MantaDigital VDR,KELVIN HUGES MantaDigital VDR,KELVIN HUGES MantaDigital VDR,KELVIN HUGES MantaDigital VDR,KELVIN HUGES MantaDigital VDR,KELVIN HUGES MantaDigital VDR,KELVIN HUGES MantaDigital VDR,KELVIN HUGES MantaDigital VDR,KELVIN HUGES MantaDigital VDR
+Dukane DK120,Dukane DK120,6 лет,6 лет,6 лет,6 лет,30 дней,30 дней,"CODE A: 3.55 В
+CODE BCD:
+2.97 В","CODE A: 3.55 В
+CODE BCD:
+2.97 В",Рисунок 42 (Батарейка для Dukane DK120)
+KELVIN HUGES X-VDR,KELVIN HUGES X-VDR,KELVIN HUGES X-VDR,KELVIN HUGES X-VDR,KELVIN HUGES X-VDR,KELVIN HUGES X-VDR,KELVIN HUGES X-VDR,KELVIN HUGES X-VDR,KELVIN HUGES X-VDR,KELVIN HUGES X-VDR,KELVIN HUGES X-VDR
+Novega PT9 NINETY,Novega PT9 NINETY,6 лет,6 лет,3 года,3 года,90 дней,90 дней,"Для маяков с сер. номером: #18717-00- 30001~30335:
+2.5-3.6 В
+Для маяков с сер. номером: #18717-00-
+30336 и выше:
+3.2 В","Для маяков с сер. номером: #18717-00- 30001~30335:
+2.5-3.6 В
+Для маяков с сер. номером: #18717-00-
+30336 и выше:
+3.2 В",Рисунок 43 (Батарейка для Novega PT9 NINETY)
+NETWAVE NW4000,NETWAVE NW4000,NETWAVE NW4000,NETWAVE NW4000,NETWAVE NW4000,NETWAVE NW4000,NETWAVE NW4000,NETWAVE NW4000,NETWAVE NW4000,NETWAVE NW4000,NETWAVE NW4000
+"Dukane DK480, DK485","Dukane DK480, DK485",6 лет,6 лет,6 лет,6 лет,30 дней,30 дней,"для маяка с кодом CODE A: 3.55 В
+для маяка с
+кодом CODE BCD: 2.97 В","для маяка с кодом CODE A: 3.55 В
+для маяка с
+кодом CODE BCD: 2.97 В","Рисунок 44 (Батарейка для Dukane DK480, DK485)"
+BENTHOS ELP 362D,BENTHOS ELP 362D,6 лет,6 лет,6 лет,6 лет,30 дней,30 дней,6В,6В,Рисунок 45 (Батарейка для BENTHOS ELP 362D)
+"NETWAVE PT-9
+(используются маяки с наклейкой фирмы NETWAVE)","NETWAVE PT-9
+(используются маяки с наклейкой фирмы NETWAVE)",6 лет,6 лет,3 года,3 года,90 дней,90 дней,,,Рисунок 46 (Батарейка для NETWAVE PT-9)
+NETWAVE NW6000,NETWAVE NW6000,NETWAVE NW6000,NETWAVE NW6000,NETWAVE NW6000,NETWAVE NW6000,NETWAVE NW6000,NETWAVE NW6000,NETWAVE NW6000,NETWAVE NW6000,NETWAVE NW6000
+NW4860-695 Netwave PT9-Ninety Underwater Locator Beacon (используются маяки с наклейкой фирмы NETWAVE),NW4860-695 Netwave PT9-Ninety Underwater Locator Beacon (используются маяки с наклейкой фирмы NETWAVE),6 лет,6 лет,3 года,3 года,90 дней,90 дней,"Мин. 3,2 В","Мин. 3,2 В",Рисунок 47 (Батарейка для NW4860-695 Netwave PT9-Ninety Underwater Locator Beacon )
+SperryMarine Voyage Master II – III,SperryMarine Voyage Master II – III,SperryMarine Voyage Master II – III,SperryMarine Voyage Master II – III,SperryMarine Voyage Master II – III,SperryMarine Voyage Master II – III,SperryMarine Voyage Master II – III,SperryMarine Voyage Master II – III,SperryMarine Voyage Master II – III,SperryMarine Voyage Master II – III,SperryMarine Voyage Master II – III
+Dukane DK120,Dukane DK120,6 лет,6 лет,6 лет,6 лет,30 дней,30 дней,"CODE A: 3.55 В CODE BCD:
+2.97 В","CODE A: 3.55 В CODE BCD:
+2.97 В",Рисунок 48 (Батарейка для Dukane DK120)
+Teledyne benthos ELPD 362D,Teledyne benthos ELPD 362D,6 лет,6 лет,6 лет,6 лет,30 дней,30 дней,6В,6В,Рисунок 49 (Батарейка для Teledyne benthos ELPD 362D)
+Danelec AUB- 90,Danelec AUB- 90,6 лет,6 лет,3 года,3 года,90 дней,90 дней,"3,2 В","3,2 В",Рисунок 50 (Батарейка для Danelec AUB- 90)
+Danelec AUB- 30,Danelec AUB- 30,6 лет,6 лет,3 года,3 года,30 дней,30 дней,"2,5 В","2,5 В",
+SperryMarine Voyage Master IV SVDR,SperryMarine Voyage Master IV SVDR,SperryMarine Voyage Master IV SVDR,SperryMarine Voyage Master IV SVDR,SperryMarine Voyage Master IV SVDR,SperryMarine Voyage Master IV SVDR,SperryMarine Voyage Master IV SVDR,SperryMarine Voyage Master IV SVDR,SperryMarine Voyage Master IV SVDR,SperryMarine Voyage Master IV SVDR,SperryMarine Voyage Master IV SVDR
+Danelec AUB- 90,Danelec AUB- 90,6 лет,6 лет,3 года,3 года,90 дней,90 дней,"3,2 В","3,2 В",Рисунок 51 (Батарейка для Danelec AUB- 90)
+Danelec AUB- 30,Danelec AUB- 30,6 лет,6 лет,3 года,3 года,30 дней,30 дней,"2,5 В","2,5 В",
+SperryMarine Voyage Master IV VDR,SperryMarine Voyage Master IV VDR,SperryMarine Voyage Master IV VDR,SperryMarine Voyage Master IV VDR,SperryMarine Voyage Master IV VDR,SperryMarine Voyage Master IV VDR,SperryMarine Voyage Master IV VDR,SperryMarine Voyage Master IV VDR,SperryMarine Voyage Master IV VDR,SperryMarine Voyage Master IV VDR,SperryMarine Voyage Master IV VDR
+Danelec AUB- 90,Danelec AUB- 90,6 лет,6 лет,3 года,3 года,90 дней,90 дней,"3,2 В","3,2 В",Рисунок 52 (Батарейка для Danelec AUB- 90)
+RUTTER 100_100-G2_100-G3,RUTTER 100_100-G2_100-G3,RUTTER 100_100-G2_100-G3,RUTTER 100_100-G2_100-G3,RUTTER 100_100-G2_100-G3,RUTTER 100_100-G2_100-G3,RUTTER 100_100-G2_100-G3,RUTTER 100_100-G2_100-G3,RUTTER 100_100-G2_100-G3,RUTTER 100_100-G2_100-G3,RUTTER 100_100-G2_100-G3
+"Netwave Beacon, PT-9 Fixed Acoustic","Netwave Beacon, PT-9 Fixed Acoustic",,,,,,,,,
+Novega PT9 C- proof,Novega PT9 C- proof,6 лет,6 лет,3 года,3 года,30 дней,30 дней,2.5 В и более,2.5 В и более,Рисунок 53 (Батарейка для Novega PT9 C- proof)
+Dukane DK485,Dukane DK485,6 лет,6 лет,6 лет,6 лет,30 дней,30 дней,,,Рисунок 54 (Батарейка для Dukane DK485)
+BENTHOS ELP 362D,BENTHOS ELP 362D,6 лет,6 лет,6 лет,6 лет,30 дней,30 дней,6В,6В,Рисунок 55 (Батарейка для BENTHOS ELP 362D)
+NSR NVR-9000,NSR NVR-9000,NSR NVR-9000,NSR NVR-9000,NSR NVR-9000,NSR NVR-9000,NSR NVR-9000,NSR NVR-9000,NSR NVR-9000,NSR NVR-9000,NSR NVR-9000
+Dukane DKM502/90,Dukane DKM502/90,6 лет,6 лет,3 года,3 года,90 дней,90 дней,2.8 В и более,2.8 В и более,Рисунок 56 (Батарейка для Dukane DKM502/90)
+OCEAN VOYAGER DR-100S,OCEAN VOYAGER DR-100S,OCEAN VOYAGER DR-100S,OCEAN VOYAGER DR-100S,OCEAN VOYAGER DR-100S,OCEAN VOYAGER DR-100S,OCEAN VOYAGER DR-100S,OCEAN VOYAGER DR-100S,OCEAN VOYAGER DR-100S,OCEAN VOYAGER DR-100S,OCEAN VOYAGER DR-100S
+PT9 C-PROOF,PT9 C-PROOF,6 лет,6 лет,3 года,3 года,30 дней,30 дней,2.5 В и более,2.5 В и более,Рисунок 57 (Батарейка для PT9 C-PROOF)
+Рисунок 67 (АКБ Delta HR12-5) (image_50.jpeg)
+
+Рисунок 67 (АКБ Delta HR12-5):
+Тип M2-M3.5,Тип M2-M3.5,Тип M2-M3.5,Тип M2-M3.5,Тип M2-M3.5,Тип M2-M3.5,Тип M2-M3.5,Тип M2-M3.5,Тип M2-M3.5,Тип M2-M3.5
+АКБ,Тип,Напря- жение,Напря- жение,"Предпола
+- гаемый
+срок службы","Предпола
+- гаемый
+срок службы","Предпола
+- гаемый
+срок службы",Срок эксплу- атации,Емкость,Емкость
+Yuasa NPL 24- 12I или аналог,"Свинцово- кислотная, с
+клапанным регулятором",12 В на блок,12 В на блок,7-10 лет при 20°С,7-10 лет при 20°С,7-10 лет при 20°С,5 лет с даты установки,"24 Ач
+Работа в течение 2 часов","24 Ач
+Работа в течение 2 часов"
+Рисунок 58 (АКБ Yuasa NPL 24- 12I ),Рисунок 58 (АКБ Yuasa NPL 24- 12I ),Рисунок 58 (АКБ Yuasa NPL 24- 12I ),Рисунок 58 (АКБ Yuasa NPL 24- 12I ),Рисунок 58 (АКБ Yuasa NPL 24- 12I ),Рисунок 58 (АКБ Yuasa NPL 24- 12I ),Рисунок 58 (АКБ Yuasa NPL 24- 12I ),Рисунок 58 (АКБ Yuasa NPL 24- 12I ),Рисунок 58 (АКБ Yuasa NPL 24- 12I ),Рисунок 58 (АКБ Yuasa NPL 24- 12I )
+Тип M4,Тип M4,Тип M4,Тип M4,Тип M4,Тип M4,Тип M4,Тип M4,Тип M4,Тип M4
+Yuasa NPL-1 2 12AH или аналог,,"12 В на
+блок","12 В на
+блок","3-5 лет при
+20°С","3-5 лет при
+20°С","3-5 лет при
+20°С",5 лет с даты установки,12 Ач Работа в течение 2 часов,12 Ач Работа в течение 2 часов
+Рисунок 59 (АКБ Yuasa NPL-1 2 12AH или аналог),Рисунок 59 (АКБ Yuasa NPL-1 2 12AH или аналог),Рисунок 59 (АКБ Yuasa NPL-1 2 12AH или аналог),Рисунок 59 (АКБ Yuasa NPL-1 2 12AH или аналог),Рисунок 59 (АКБ Yuasa NPL-1 2 12AH или аналог),Рисунок 59 (АКБ Yuasa NPL-1 2 12AH или аналог),Рисунок 59 (АКБ Yuasa NPL-1 2 12AH или аналог),Рисунок 59 (АКБ Yuasa NPL-1 2 12AH или аналог),Рисунок 59 (АКБ Yuasa NPL-1 2 12AH или аналог),Рисунок 59 (АКБ Yuasa NPL-1 2 12AH или аналог)
+"Тип F1, S1, F2","Тип F1, S1, F2","Тип F1, S1, F2","Тип F1, S1, F2","Тип F1, S1, F2","Тип F1, S1, F2","Тип F1, S1, F2","Тип F1, S1, F2","Тип F1, S1, F2","Тип F1, S1, F2","Тип F1, S1, F2"
+АКБ,АКБ,АКБ,Напря- жение,Напря- жение,Срок эксплуатации,Срок эксплуатации,Срок эксплуатации,Срок эксплуатации,Емкость,Емкость
+Leader CN5-12H,Leader CN5-12H,Leader CN5-12H,12 В,12 В,3 года с даты установки,3 года с даты установки,3 года с даты установки,3 года с даты установки,5 Ач,5 Ач
+Рисунок 60 (АКБ Leader CN5-12H),Рисунок 60 (АКБ Leader CN5-12H),Рисунок 60 (АКБ Leader CN5-12H),Рисунок 60 (АКБ Leader CN5-12H),Рисунок 60 (АКБ Leader CN5-12H),Рисунок 60 (АКБ Leader CN5-12H),Рисунок 60 (АКБ Leader CN5-12H),Рисунок 60 (АКБ Leader CN5-12H),Рисунок 60 (АКБ Leader CN5-12H),Рисунок 60 (АКБ Leader CN5-12H),Рисунок 60 (АКБ Leader CN5-12H)
+Аналоги для Leader CN5-12H,Аналоги для Leader CN5-12H,Аналоги для Leader CN5-12H,Аналоги для Leader CN5-12H,Аналоги для Leader CN5-12H,Аналоги для Leader CN5-12H,Аналоги для Leader CN5-12H,Аналоги для Leader CN5-12H,Аналоги для Leader CN5-12H,Аналоги для Leader CN5-12H,Аналоги для Leader CN5-12H
+"YUASA NPH 5-12
+
+Рисунок 61 (АКБ YUASA NPH 5-12)","YUASA NPH 5-12
+
+Рисунок 61 (АКБ YUASA NPH 5-12)","YUASA NPH 5-12
+
+Рисунок 61 (АКБ YUASA NPH 5-12)","YUASA NPH 5-12
+
+Рисунок 61 (АКБ YUASA NPH 5-12)","YUASA NPH 5-12
+
+Рисунок 61 (АКБ YUASA NPH 5-12)","YUASA NPH 5-12
+
+Рисунок 61 (АКБ YUASA NPH 5-12)","Delta HR12-5
+
+Рисунок 62 (АКБ Delta HR12-5)","Delta HR12-5
+
+Рисунок 62 (АКБ Delta HR12-5)","Delta HR12-5
+
+Рисунок 62 (АКБ Delta HR12-5)","Delta HR12-5
+
+Рисунок 62 (АКБ Delta HR12-5)","Delta HR12-5
+
+Рисунок 62 (АКБ Delta HR12-5)"
+Рисунок 65 (АКБ Yuasa RE12-12 или Yuasa NPH 5-12) (image_48.jpeg)
+
+Рисунок 65 (АКБ Yuasa RE12-12 или Yuasa NPH 5-12):
+Тип M2-M3.5,Тип M2-M3.5,Тип M2-M3.5,Тип M2-M3.5,Тип M2-M3.5,Тип M2-M3.5,Тип M2-M3.5,Тип M2-M3.5,Тип M2-M3.5,Тип M2-M3.5
+АКБ,Тип,Напря- жение,Напря- жение,"Предпола
+- гаемый
+срок службы","Предпола
+- гаемый
+срок службы","Предпола
+- гаемый
+срок службы",Срок эксплу- атации,Емкость,Емкость
+Yuasa NPL 24- 12I или аналог,"Свинцово- кислотная, с
+клапанным регулятором",12 В на блок,12 В на блок,7-10 лет при 20°С,7-10 лет при 20°С,7-10 лет при 20°С,5 лет с даты установки,"24 Ач
+Работа в течение 2 часов","24 Ач
+Работа в течение 2 часов"
+Рисунок 58 (АКБ Yuasa NPL 24- 12I ),Рисунок 58 (АКБ Yuasa NPL 24- 12I ),Рисунок 58 (АКБ Yuasa NPL 24- 12I ),Рисунок 58 (АКБ Yuasa NPL 24- 12I ),Рисунок 58 (АКБ Yuasa NPL 24- 12I ),Рисунок 58 (АКБ Yuasa NPL 24- 12I ),Рисунок 58 (АКБ Yuasa NPL 24- 12I ),Рисунок 58 (АКБ Yuasa NPL 24- 12I ),Рисунок 58 (АКБ Yuasa NPL 24- 12I ),Рисунок 58 (АКБ Yuasa NPL 24- 12I )
+Тип M4,Тип M4,Тип M4,Тип M4,Тип M4,Тип M4,Тип M4,Тип M4,Тип M4,Тип M4
+Yuasa NPL-1 2 12AH или аналог,,"12 В на
+блок","12 В на
+блок","3-5 лет при
+20°С","3-5 лет при
+20°С","3-5 лет при
+20°С",5 лет с даты установки,12 Ач Работа в течение 2 часов,12 Ач Работа в течение 2 часов
+Рисунок 59 (АКБ Yuasa NPL-1 2 12AH или аналог),Рисунок 59 (АКБ Yuasa NPL-1 2 12AH или аналог),Рисунок 59 (АКБ Yuasa NPL-1 2 12AH или аналог),Рисунок 59 (АКБ Yuasa NPL-1 2 12AH или аналог),Рисунок 59 (АКБ Yuasa NPL-1 2 12AH или аналог),Рисунок 59 (АКБ Yuasa NPL-1 2 12AH или аналог),Рисунок 59 (АКБ Yuasa NPL-1 2 12AH или аналог),Рисунок 59 (АКБ Yuasa NPL-1 2 12AH или аналог),Рисунок 59 (АКБ Yuasa NPL-1 2 12AH или аналог),Рисунок 59 (АКБ Yuasa NPL-1 2 12AH или аналог)
+"Тип F1, S1, F2","Тип F1, S1, F2","Тип F1, S1, F2","Тип F1, S1, F2","Тип F1, S1, F2","Тип F1, S1, F2","Тип F1, S1, F2","Тип F1, S1, F2","Тип F1, S1, F2","Тип F1, S1, F2","Тип F1, S1, F2"
+АКБ,АКБ,АКБ,Напря- жение,Напря- жение,Срок эксплуатации,Срок эксплуатации,Срок эксплуатации,Срок эксплуатации,Емкость,Емкость
+Leader CN5-12H,Leader CN5-12H,Leader CN5-12H,12 В,12 В,3 года с даты установки,3 года с даты установки,3 года с даты установки,3 года с даты установки,5 Ач,5 Ач
+Рисунок 60 (АКБ Leader CN5-12H),Рисунок 60 (АКБ Leader CN5-12H),Рисунок 60 (АКБ Leader CN5-12H),Рисунок 60 (АКБ Leader CN5-12H),Рисунок 60 (АКБ Leader CN5-12H),Рисунок 60 (АКБ Leader CN5-12H),Рисунок 60 (АКБ Leader CN5-12H),Рисунок 60 (АКБ Leader CN5-12H),Рисунок 60 (АКБ Leader CN5-12H),Рисунок 60 (АКБ Leader CN5-12H),Рисунок 60 (АКБ Leader CN5-12H)
+Аналоги для Leader CN5-12H,Аналоги для Leader CN5-12H,Аналоги для Leader CN5-12H,Аналоги для Leader CN5-12H,Аналоги для Leader CN5-12H,Аналоги для Leader CN5-12H,Аналоги для Leader CN5-12H,Аналоги для Leader CN5-12H,Аналоги для Leader CN5-12H,Аналоги для Leader CN5-12H,Аналоги для Leader CN5-12H
+"YUASA NPH 5-12
+
+Рисунок 61 (АКБ YUASA NPH 5-12)","YUASA NPH 5-12
+
+Рисунок 61 (АКБ YUASA NPH 5-12)","YUASA NPH 5-12
+
+Рисунок 61 (АКБ YUASA NPH 5-12)","YUASA NPH 5-12
+
+Рисунок 61 (АКБ YUASA NPH 5-12)","YUASA NPH 5-12
+
+Рисунок 61 (АКБ YUASA NPH 5-12)","YUASA NPH 5-12
+
+Рисунок 61 (АКБ YUASA NPH 5-12)","Delta HR12-5
+
+Рисунок 62 (АКБ Delta HR12-5)","Delta HR12-5
+
+Рисунок 62 (АКБ Delta HR12-5)","Delta HR12-5
+
+Рисунок 62 (АКБ Delta HR12-5)","Delta HR12-5
+
+Рисунок 62 (АКБ Delta HR12-5)","Delta HR12-5
+
+Рисунок 62 (АКБ Delta HR12-5)"
+
+
+Дополнительные изображения по вашему запросу:
+Рисунок 62 (АКБ Delta HR12-5)
+Рисунок 67 (АКБ Delta HR12-5)
+Рисунок 65 (АКБ Yuasa RE12-12 или Yuasa NPH 5-12)

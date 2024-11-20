@@ -75,6 +75,7 @@ all_collections = utility.list_collections()
 all_texts = []
 all_embeddings = []
 all_table_references = []
+all_related_tables = []  # Новый список для related_table
 
 for collection_name in all_collections:
     collection = Collection(name=collection_name)
@@ -82,15 +83,20 @@ for collection_name in all_collections:
     try:
         if collection.num_entities > 0:
             entities = collection.query(
-                expr="id > 0", output_fields=["embedding", "text", "reference"]
+                expr="id > 0",
+                output_fields=["embedding", "text", "reference", "related_table"],
             )
             texts = [entity["text"] for entity in entities]
             embeddings = [entity["embedding"] for entity in entities]
             table_references = [entity["reference"] for entity in entities]
+            related_tables = [
+                entity.get("related_table", "") for entity in entities
+            ]  # Получаем related_table
 
             all_texts.extend(texts)
             all_embeddings.extend(embeddings)
             all_table_references.extend(table_references)
+            all_related_tables.extend(related_tables)  # Заполняем related_table
     except Exception as e:
         print(f"Коллекция {collection_name} не активна или не загружена: {e}")
 
@@ -105,13 +111,17 @@ def create_embedding_for_query(query):
 
 
 # Поиск наиболее релевантных эмбеддингов
-def find_most_similar(query_embedding, top_n=15):
+def find_most_similar(query_embedding, top_n=2):
     query_embedding_np = np.array([query_embedding], dtype=np.float32)
     similarities = np.dot(all_embeddings, query_embedding_np.T)
     most_similar_indices = np.argsort(similarities, axis=0)[::-1][:top_n]
-    return [all_texts[i] for i in most_similar_indices.flatten()], [
-        all_table_references[i] for i in most_similar_indices.flatten()
-    ]
+    return (
+        [all_texts[i] for i in most_similar_indices.flatten()],
+        [all_table_references[i] for i in most_similar_indices.flatten()],
+        [
+            all_related_tables[i] for i in most_similar_indices.flatten()
+        ],  # Добавляем related_table
+    )
 
 
 # Чтение содержимого таблицы из MinIO (S3 хранилища)
@@ -165,16 +175,39 @@ from telegram import InputMediaPhoto
 user_image_context = {}
 
 
-def filter_and_prioritize_context(most_similar_texts, most_similar_refs):
+def filter_and_prioritize_context(
+    most_similar_texts, most_similar_refs, most_similar_related_tables
+):
     texts_and_tables = []
     images = []
+    additional_contexts = []  # Для хранения текстов найденных объектов
+    added_tables = set()  # Множество для отслеживания уже добавленных таблиц
 
     # Разделяем объекты на тексты/таблицы и изображения
     for i, ref in enumerate(most_similar_refs):
+        related_table = most_similar_related_tables[i]
         if ref.endswith(".csv") or not re.search(r"Рисунок \d+", most_similar_texts[i]):
-            texts_and_tables.append((most_similar_texts[i], ref))
+            # Добавляем текст/таблицу, если она еще не была добавлена
+            if related_table not in added_tables:
+                texts_and_tables.append((most_similar_texts[i], related_table))
+                added_tables.add(related_table)
         else:
-            images.append((most_similar_texts[i], ref))
+            images.append((most_similar_texts[i], related_table))
+
+        # Если есть related_table, ищем объекты, где related_table совпадает с reference
+        if related_table and related_table not in added_tables:
+            found_objects = search_by_reference_in_milvus(
+                related_table
+            )  # Новая функция
+            if found_objects:
+                for obj in found_objects:
+                    additional_contexts.append(obj["text"])  # Сохраняем текст объекта
+
+            # Читаем данные из таблицы related_table
+            table_content = read_table_from_minio(related_table)
+            if table_content:
+                additional_contexts.append(f"{related_table}:\n{table_content}")
+                added_tables.add(related_table)  # Помечаем таблицу как добавленную
 
     # Ограничиваем количество текстов и таблиц до 10
     prioritized_texts_and_tables = texts_and_tables[:10]
@@ -182,8 +215,25 @@ def filter_and_prioritize_context(most_similar_texts, most_similar_refs):
     # Ограничиваем количество изображений до 10
     prioritized_images = images[:10]
 
-    # Возвращаем два отдельных списка
-    return prioritized_texts_and_tables, prioritized_images
+    # Возвращаем два отдельных списка и дополнительный контекст
+    return prioritized_texts_and_tables, prioritized_images, additional_contexts
+
+
+def search_by_reference_in_milvus(reference_value):
+    """Ищет объекты в Milvus, у которых reference совпадает с указанным значением."""
+    collection = Collection(name=MILVUS_COLLECTION)
+    try:
+        # Выполняем запрос к Milvus
+        result = collection.query(
+            expr=f'reference == "{reference_value}"',
+            output_fields=["text", "reference"],
+        )
+        return result if result else None
+    except Exception as e:
+        logger.error(
+            f"Ошибка при поиске в Milvus для reference '{reference_value}': {e}"
+        )
+        return None
 
 
 async def handle_message(update: Update, context):
@@ -207,20 +257,33 @@ async def handle_message(update: Update, context):
                 logger.info(f"Добавлен контекст для {figure_id}: {figure_text}")
 
         query_embedding = create_embedding_for_query(user_message)
-        most_similar_texts, most_similar_refs = find_most_similar(query_embedding)
+        most_similar_texts, most_similar_refs, most_similar_related_tables = (
+            find_most_similar(query_embedding)
+        )
 
         # Фильтруем и приоритизируем контекст
-        prioritized_texts_and_tables, prioritized_images = (
-            filter_and_prioritize_context(most_similar_texts, most_similar_refs)
+        prioritized_texts_and_tables, prioritized_images, additional_contexts = (
+            filter_and_prioritize_context(
+                most_similar_texts, most_similar_refs, most_similar_related_tables
+            )
         )
 
         # Формируем текст контекста из текстов и таблиц
-        context_text = "\n\n".join([obj[0] for obj in prioritized_texts_and_tables])
+        context_text = "\n\n".join(
+            [f"{obj[0]} ({obj[1]})" for obj in prioritized_texts_and_tables]
+        )
 
         # Добавляем изображения в контекст (если есть)
         if prioritized_images:
             context_text += "\n\nРисунки:\n" + "\n".join(
-                [f"{img[0]} ({img[1]})" for img in prioritized_images]
+                [
+                    f"{img[0]} ({img[1]})" for img in prioritized_images
+                ]  # img[1] теперь берет related_table
+            )
+
+        if additional_contexts:
+            context_text += "\n\nДополнительный контекст:\n" + "\n".join(
+                additional_contexts
             )
 
         table_contexts = []
@@ -246,12 +309,6 @@ async def handle_message(update: Update, context):
 
         if table_contexts:
             context_text += "\n\nТаблицы:\n" + "\n\n".join(table_contexts)
-
-        if images_to_mention:
-            context_text += (
-                "\n\nДополнительные изображения по вашему запросу:\n"
-                + "\n".join([img[0] for img in images_to_mention])
-            )
 
         # Сохраняем контекст в лог-файл
         log_filename = save_context_to_log(user_tag, context_text)

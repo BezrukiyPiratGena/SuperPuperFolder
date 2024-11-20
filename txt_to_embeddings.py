@@ -1,5 +1,6 @@
 from ast import Index
 import re
+import time
 import docx
 import spacy
 import openai
@@ -19,6 +20,7 @@ from docx import Document
 from io import BytesIO, StringIO
 from PIL import Image
 import csv
+import tiktoken
 
 # Загрузка переменных среды
 load_dotenv("tokens.env")
@@ -78,12 +80,43 @@ else:
 nlp = spacy.load("ru_core_news_lg")
 
 
-def create_embeddings(text):
+def create_embeddings(text, pause_duration=0.5):
     """Создает эмбеддинг текста с помощью OpenAI."""
     if not text.strip():
         return None
-    response = openai.embeddings.create(input=[text], model="text-embedding-ada-002")
-    return response.data[0].embedding
+    try:
+        num_tokens = count_tokens(text)
+        print(f"Количество токенов в тексте: {num_tokens}")
+        response = openai.embeddings.create(
+            input=[text], model="text-embedding-ada-002"
+        )
+        time.sleep(pause_duration)
+        return response.data[0].embedding
+    except Exception as e:
+        print(f"Ошибка при создании эмбеддинга: {e}")
+        return None
+
+
+def count_tokens(text, model="text-embedding-ada-002"):
+    """
+    Подсчитывает количество токенов в тексте для указанной модели OpenAI.
+
+    Args:
+        text (str): Текст, для которого нужно посчитать токены.
+        model (str): Название модели OpenAI (по умолчанию text-embedding-ada-002).
+
+    Returns:
+        int: Количество токенов в тексте.
+    """
+    encoding = tiktoken.encoding_for_model(model)
+    tokens = encoding.encode(text)
+    return len(tokens)
+
+
+# Пример использования
+text = "Это пример текста для подсчета токенов."
+num_tokens = count_tokens(text)
+print(f"Количество токенов: {num_tokens}")
 
 
 def split_text_logically(text):
@@ -215,7 +248,7 @@ def extract_content_from_word(word_path, bucket_name):
                                         "text": text_after_image,
                                         "reference": image_name,
                                         "figure_id": figure_id,
-                                        "related_table": table_name,  # Указываем таблицу, из которой взято изображение
+                                        "related_table": f"table_{table_counter}.csv",  # Смещение на 1 для таблицы
                                     }
                                 )
                                 print(
