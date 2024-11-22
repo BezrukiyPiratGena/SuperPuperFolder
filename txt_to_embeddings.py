@@ -134,6 +134,41 @@ def split_text_logically(text):
     return logical_blocks
 
 
+def split_table_text_logically(table_data, max_length=1000):
+    """
+    Разделяет текст таблицы на логические блоки, не разрывая строки между блоками.
+
+    Args:
+        table_data (list of list of str): Данные таблицы в виде списка строк, где каждая строка - это список ячеек.
+        max_length (int): Максимальное количество символов в одном логическом блоке.
+
+    Returns:
+        list of str: Список логических блоков текста таблицы.
+    """
+    logical_blocks = []
+    current_block = ""
+
+    for row in table_data:
+        row_text = "\t".join(row)  # Объединяем ячейки строки через табуляцию
+        if (
+            len(current_block) + len(row_text) + 1 <= max_length
+        ):  # +1 для разделителя строк
+            if current_block:
+                current_block += (
+                    "\n"  # Добавляем перенос строки перед новой строкой таблицы
+                )
+            current_block += row_text
+        else:
+            if current_block:  # Добавляем текущий блок в результат
+                logical_blocks.append(current_block)
+            current_block = row_text  # Начинаем новый блок с текущей строки
+
+    if current_block:  # Добавляем оставшийся блок
+        logical_blocks.append(current_block)
+
+    return logical_blocks
+
+
 def save_table_to_minio(bucket_name, table_name, table_data):
     """Сохраняет таблицу в MinIO в формате CSV."""
     csv_buffer = StringIO()
@@ -184,6 +219,7 @@ def extract_content_from_word(word_path, bucket_name):
                     # Сохраняем текущую собранную таблицу в MinIO как одну таблицу
                     table_name = f"table_{table_counter}.csv"
                     save_table_to_minio(bucket_name, table_name, current_table_data)
+                    # Сохраняем описание таблицы
                     explanation = current_text_block[-1] if current_text_block else ""
                     text_blocks_with_refs.append(
                         {
@@ -193,6 +229,17 @@ def extract_content_from_word(word_path, bucket_name):
                             "related_table": "",
                         }
                     )
+                    # Обрабатываем текст из таблицы и сохраняем в Milvus
+                    table_text_blocks = split_table_text_logically(current_table_data)
+                    for block in table_text_blocks:
+                        text_blocks_with_refs.append(
+                            {
+                                "text": block,
+                                "reference": "",
+                                "figure_id": "",
+                                "related_table": table_name,
+                            }
+                        )
                     current_table_data = []  # Сброс текущих данных таблицы
                     table_counter += 1
                 current_text_block.append(paragraph)

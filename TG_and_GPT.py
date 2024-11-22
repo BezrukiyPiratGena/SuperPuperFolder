@@ -111,7 +111,7 @@ def create_embedding_for_query(query):
 
 
 # Поиск наиболее релевантных эмбеддингов
-def find_most_similar(query_embedding, top_n=2):
+def find_most_similar(query_embedding, top_n=10):
     query_embedding_np = np.array([query_embedding], dtype=np.float32)
     similarities = np.dot(all_embeddings, query_embedding_np.T)
     most_similar_indices = np.argsort(similarities, axis=0)[::-1][:top_n]
@@ -180,34 +180,50 @@ def filter_and_prioritize_context(
 ):
     texts_and_tables = []
     images = []
-    additional_contexts = []  # Для хранения текстов найденных объектов
-    added_tables = set()  # Множество для отслеживания уже добавленных таблиц
+    additional_contexts = []  # Для хранения дополнительного контекста
+    added_tables = set()  # Для отслеживания уже добавленных таблиц
 
     # Разделяем объекты на тексты/таблицы и изображения
     for i, ref in enumerate(most_similar_refs):
         related_table = most_similar_related_tables[i]
-        if ref.endswith(".csv") or not re.search(r"Рисунок \d+", most_similar_texts[i]):
-            # Добавляем текст/таблицу, если она еще не была добавлена
-            if related_table not in added_tables:
-                texts_and_tables.append((most_similar_texts[i], related_table))
-                added_tables.add(related_table)
-        else:
-            images.append((most_similar_texts[i], related_table))
 
-        # Если есть related_table, ищем объекты, где related_table совпадает с reference
-        if related_table and related_table not in added_tables:
-            found_objects = search_by_reference_in_milvus(
-                related_table
-            )  # Новая функция
+        # Обработка таблиц
+        if ref.endswith(".csv"):
+            if ref not in added_tables:
+                table_content = read_table_from_minio(ref)
+                if table_content:
+                    texts_and_tables.append((f"Таблица ({ref}):\n{table_content}", ref))
+                    added_tables.add(ref)
+                else:
+                    logger.warning(f"Не удалось прочитать таблицу: {ref}")
+        # Обработка текста с родительской таблицей
+        elif related_table:
+            # Проверяем, есть ли связь с таблицей
+            if related_table not in added_tables:
+                table_content = read_table_from_minio(related_table)
+                if table_content:
+                    table_name = next(
+                        (
+                            text
+                            for text, reference in zip(all_texts, all_table_references)
+                            if reference == related_table
+                        ),
+                        "Безымянная таблица",
+                    )
+                    texts_and_tables.append(
+                        (f"Таблица ({table_name}):\n{table_content}", related_table)
+                    )
+                    added_tables.add(related_table)
+
+            # Ищем дополнительные объекты, связанные с таблицей
+            found_objects = search_by_reference_in_milvus(related_table)
             if found_objects:
                 for obj in found_objects:
-                    additional_contexts.append(obj["text"])  # Сохраняем текст объекта
+                    additional_contexts.append(obj["text"])
 
-            # Читаем данные из таблицы related_table
-            table_content = read_table_from_minio(related_table)
-            if table_content:
-                additional_contexts.append(f"{related_table}:\n{table_content}")
-                added_tables.add(related_table)  # Помечаем таблицу как добавленную
+        # Обработка изображений
+        else:
+            images.append((most_similar_texts[i], ref))
 
     # Ограничиваем количество текстов и таблиц до 10
     prioritized_texts_and_tables = texts_and_tables[:10]
@@ -275,7 +291,7 @@ async def handle_message(update: Update, context):
 
         # Добавляем изображения в контекст (если есть)
         if prioritized_images:
-            context_text += "\n\nРисунки:\n" + "\n".join(
+            context_text += "\n\nРисунки и текста:\n" + "\n".join(
                 [
                     f"{img[0]} ({img[1]})" for img in prioritized_images
                 ]  # img[1] теперь берет related_table
@@ -453,7 +469,7 @@ async def send_large_message(update, text, max_length=4000):
 
 def escape_markdown(text):
     """Экранирует символы, требующие экранирования в MarkdownV2."""
-    escape_chars = r"_*[]()~`>#+--=|{}.!"
+    escape_chars = r"_*[]()~>#+--=|{}.!"
     return "".join(f"\\{char}" if char in escape_chars else char for char in text)
 
 
