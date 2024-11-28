@@ -11,34 +11,58 @@ from pymilvus import connections, Collection, utility
 import tiktoken
 import boto3  # Библиотека для работы с MinIO (S3 совместимое API)
 from botocore.exceptions import NoCredentialsError
-from telegram import InputMediaPhoto
 import re
 import asyncio
 from datetime import datetime
+from google.oauth2.service_account import Credentials
 
 # Загрузка переменных окружения из файла .env
 load_dotenv("tokens.env")
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
-MINIO_BUCKET_NAME = os.getenv("MINIO_BUCKET_NAME")
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")
-MINIO_REGION_NAME = os.getenv("MINIO_REGION_NAME")
-MILVUS_HOST = os.getenv("MILVUS_HOST")
-MILVUS_PORT = os.getenv("MILVUS_PORT")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # Токен ТГ Бота
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # API токен OpenAI
+MODEL_GPT_INT = os.getenv("MODEL_GPT_INT")  #   Модель ИИ, с которой ведется диалог
+
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")  # Логин для подключенияMiniO
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")  # Пароль для подключения MiniO
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")  # IP и порт MiniO
+MINIO_REGION_NAME = os.getenv("MINIO_REGION_NAME")  # Регион MiniO
+MINIO_BUCKET_NAME = os.getenv("MINIO_BUCKET_NAME")  # Название Бакета MiniO
+MINIO_FOLDER_DOCS_NAME = os.getenv("MINIO_FOLDER_DOCS_NAME") # Название Папки хранения таблиц/Изображений 
+MINIO_FOLDER_LOGS_NAME = os.getenv("MINIO_FOLDER_LOGS_NAME")  # Место, куда сохраняются логи контекста
+
+MILVUS_DB_NAME = os.getenv("MILVUS_DB_NAME")  # БД коллекций Милвуса(БД)
+MILVUS_COLLECTION = os.getenv("MILVUS_COLLECTION")  # Коллекция Милвуса(БД)
+MILVUS_HOST = os.getenv("MILVUS_HOST")  # IP Милвуса(БД)
+MILVUS_PORT = os.getenv("MILVUS_PORT")  # Порт Милвуса(БД)
+
 SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")  # ID Google Таблицы MODEL_GPT_INT
-MODEL_GPT_INT = os.getenv("MODEL_GPT_INT")
-MILVUS_COLLECTION = os.getenv("MILVUS_COLLECTION")
-LOG_DIR = os.getenv("LOG_DIR")
+
+private_key = os.getenv("GOOGLE_PRIVATE_KEY")
+if not private_key:
+    raise ValueError("GOOGLE_PRIVATE_KEY is not set")
+private_key = private_key.replace("\\n", "\n")
+
+google_credentials = { #Тут все ключи для работы API от гугл щит
+    "type": os.getenv("GOOGLE_TYPE"),
+    "project_id": os.getenv("GOOGLE_PROJECT_ID"),
+    "private_key_id": os.getenv("GOOGLE_PRIVATE_KEY_ID"),
+    "private_key": private_key,  # Экранирование переносов строк
+    "client_email": os.getenv("GOOGLE_CLIENT_EMAIL"),
+    "client_id": os.getenv("GOOGLE_CLIENT_ID"),
+    "auth_uri": os.getenv("GOOGLE_AUTH_URI"),
+    "token_uri": os.getenv("GOOGLE_TOKEN_URI"),
+    "auth_provider_x509_cert_url": os.getenv("GOOGLE_AUTH_PROVIDER_CERT_URL"),
+    "client_x509_cert_url": os.getenv("GOOGLE_CLIENT_CERT_URL"),
+}
+
+firts_message_from_tg_bot = "Привет! Я асистент для инженеров, можешь задать мне вопрос"
 
 # Устанавливаем ключ OpenAI API
 openai.api_key = OPENAI_API_KEY
 
 # Настройка Google Sheets API
-credentials = Credentials.from_service_account_file(
-    r"C:\Project1\GITProjects\myproject2\telegramgpt.json",
-    scopes=["https://www.googleapis.com/auth/spreadsheets"],
+credentials = Credentials.from_service_account_info(
+    google_credentials, scopes=["https://www.googleapis.com/auth/spreadsheets"]
 )
 client = gspread.authorize(credentials)
 sheet = client.open_by_key(SPREADSHEET_ID).sheet1
@@ -51,8 +75,8 @@ s3_client = boto3.client(
     aws_secret_access_key=MINIO_SECRET_KEY,
     region_name=MINIO_REGION_NAME,
 )
-print(f'Логин "{MINIO_ACCESS_KEY}" для БД MiniO')
-print(f'Пароль "{MINIO_SECRET_KEY}" для БД MiniO')
+print(f'Логин "{MINIO_ACCESS_KEY}" для БД MiniO')  # Проверка LOG
+print(f'Пароль "{MINIO_SECRET_KEY}" для БД MiniO')  # Проверка PSWD
 
 # Настройка логирования
 logging.basicConfig(
@@ -61,12 +85,8 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Убедитесь, что папка существует, если нет — создайте её
-if not os.path.exists(LOG_DIR):
-    os.makedirs(LOG_DIR)
-
 # Подключаемся к Milvus
-connections.connect("default", host=MILVUS_HOST, port=MILVUS_PORT)
+connections.connect(MILVUS_DB_NAME, host=MILVUS_HOST, port=MILVUS_PORT)
 
 # Получаем список всех коллекций в базе данных
 all_collections = utility.list_collections()
@@ -149,9 +169,7 @@ def read_table_from_minio(table_reference):
 
 # Функция для обработки команды /start
 async def start(update: Update, context):
-    await update.message.reply_text(
-        "Привет! Я асистент для инженеров, можешь задать мне вопрос🌚"
-    )
+    await update.message.reply_text(firts_message_from_tg_bot)
 
 
 def count_tokens(text):
@@ -190,7 +208,7 @@ def filter_and_prioritize_context(
         # Обработка таблиц
         if ref.endswith(".csv"):
             if ref not in added_tables:
-                table_content = read_table_from_minio(ref)
+                table_content = read_table_from_minio(f"{MINIO_FOLDER_DOCS_NAME}/{ref}")
                 if table_content:
                     texts_and_tables.append((f"Таблица ({ref}):\n{table_content}", ref))
                     added_tables.add(ref)
@@ -200,7 +218,7 @@ def filter_and_prioritize_context(
         elif related_table:
             # Проверяем, есть ли связь с таблицей
             if related_table not in added_tables:
-                table_content = read_table_from_minio(related_table)
+                table_content = read_table_from_minio(f"{MINIO_FOLDER_DOCS_NAME}/{related_table}")
                 if table_content:
                     table_name = next(
                         (
@@ -252,6 +270,7 @@ def search_by_reference_in_milvus(reference_value):
         return None
 
 
+# Самый главный метод, обработки, получения, отправления сообщений
 async def handle_message(update: Update, context):
     user_id = update.message.from_user.id
     user_message = update.message.text
@@ -311,7 +330,7 @@ async def handle_message(update: Update, context):
             if ref.endswith(".csv"):  # Если это таблица
                 if ref not in unique_table_references:
                     unique_table_references.add(ref)
-                    table_content = read_table_from_minio(ref)
+                    table_content = read_table_from_minio(f"{MINIO_FOLDER_DOCS_NAME}/{ref}")
                     if table_content:
                         table_name = most_similar_texts[i]
                         table_contexts.append(f"{table_name}:\n{table_content}")
@@ -345,7 +364,11 @@ async def handle_message(update: Update, context):
             if image_ref:
                 images_to_mention.append((image_text, image_ref))
 
+        images_text = "\n".join([img[0] for img in images_to_mention])
+        
+        # Отправка всего контекста к GPT
         response = openai.chat.completions.create(
+            
             model=MODEL_GPT_INT,
             messages=[
                 {
@@ -361,10 +384,10 @@ async def handle_message(update: Update, context):
                 },
                 {
                     "role": "system",
-                    "content": f"Дополнительные изображения по вашему запросу:\n\n{'\n'.join([img[0] for img in images_to_mention])}\n\n"
-                    f"Вот релевантная информация:\n\n{context_text}",
+                    "content": f"Дополнительные изображения по вашему запросу:\n\n{images_text}\n\n"
+                    f"Вот релевантная информация:\n\n{context_text}"
                 },
-                {"role": "user", "content": user_message},
+                {"role": "user", "content": user_message}
             ],
             temperature=0.3,
         )
@@ -405,6 +428,7 @@ async def handle_message(update: Update, context):
         )
 
 
+# Метод поиска упомянутых изображений по формату "Рисунок Х"
 def search_by_figure_id(figure_id):
     collection = Collection(name=MILVUS_COLLECTION)
     try:
@@ -418,6 +442,7 @@ def search_by_figure_id(figure_id):
     return None
 
 
+# Метод добавляет ссылки на упомянутые изображения в ответе GPT
 def format_image_links(bot_reply, images_to_mention):
     """Форматирует текст ответа, добавляя кликабельные ссылки на изображения."""
     for image_text, ref in images_to_mention:
@@ -433,6 +458,7 @@ def format_image_links(bot_reply, images_to_mention):
     return bot_reply
 
 
+# Метод, разделяющий сообщения от ТГ Бота по 4000 символов с лог заглючением по абзацам
 async def send_large_message(update, text, max_length=4000):
     # Разбиваем текст по абзацам
     paragraphs = text.split("\n\n")
@@ -491,11 +517,13 @@ def find_image_reference_in_milvus(figure_id):
     return None
 
 
+# Доработка лог файла с контекстом пользователя
 def sanitize_filename(filename):
     """Функция для удаления или замены недопустимых символов в названии файла."""
     return "".join(c if c.isalnum() or c in (" ", "_", "-") else "_" for c in filename)
 
 
+# Метод создает лог файл с контекстом, отправляемым на основе вопроса юзера
 def get_unique_log_filename(user_tag):
     # Создаем уникальное имя файла на основе временной метки и никнейма пользователя
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -508,15 +536,21 @@ def get_unique_log_filename(user_tag):
 def save_context_to_log(user_tag, context_text):
     # Генерируем уникальное имя для лог-файла
     unique_log_filename = get_unique_log_filename(user_tag)
-    log_path = os.path.join(LOG_DIR, unique_log_filename)
+    log_key = f"{MINIO_FOLDER_LOGS_NAME}/{unique_log_filename}"  # Лог будет храниться в бакете под ключом logs/имя_файла
 
-    # Записываем контекст в файл
-    with open(log_path, "w", encoding="utf-8") as log_file:
-        log_file.write(
-            f"Контекст для запроса от пользователя {user_tag}:\n\n{context_text}"
+    try:
+        # Сохраняем лог в MinIO
+        s3_client.put_object(
+            Bucket=MINIO_BUCKET_NAME,  # Имя бакета из переменной окружения
+            Key=log_key,  # Путь (ключ) к файлу в бакете
+            Body=context_text.encode("utf-8"),  # Содержимое файла
         )
+        logger.info(f"Файл {unique_log_filename} успешно сохранён в бакете MinIO")
+    except Exception as e:
+        logger.error(f"Ошибка сохранения файла {unique_log_filename} в MinIO: {e}")
+        raise
 
-    return unique_log_filename  # Возвращаем имя файла для дальнейшего использования
+    return log_key  # Возвращаем ключ файла в бакете вместо локального пути
 
 
 # Функция для обработки оценок
