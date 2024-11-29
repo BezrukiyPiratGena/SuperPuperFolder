@@ -15,20 +15,25 @@ import re
 import asyncio
 from datetime import datetime
 from google.oauth2.service_account import Credentials
+import requests
 
 # Загрузка переменных окружения из файла .env
 load_dotenv("tokens.env")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # Токен ТГ Бота
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # API токен OpenAI
-MODEL_GPT_INT = os.getenv("MODEL_GPT_INT")  #   Модель ИИ, с которой ведется диалог
+MODEL_GPT_INT = os.getenv("MODEL_GPT_INT")  # Модель ИИ, с которой ведется диалог
 
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")  # Логин для подключенияMiniO
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")  # Пароль для подключения MiniO
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")  # IP и порт MiniO
 MINIO_REGION_NAME = os.getenv("MINIO_REGION_NAME")  # Регион MiniO
 MINIO_BUCKET_NAME = os.getenv("MINIO_BUCKET_NAME")  # Название Бакета MiniO
-MINIO_FOLDER_DOCS_NAME = os.getenv("MINIO_FOLDER_DOCS_NAME") # Название Папки хранения таблиц/Изображений 
-MINIO_FOLDER_LOGS_NAME = os.getenv("MINIO_FOLDER_LOGS_NAME")  # Место, куда сохраняются логи контекста
+MINIO_FOLDER_DOCS_NAME = os.getenv(
+    "MINIO_FOLDER_DOCS_NAME"
+)  # Название Папки хранения таблиц/Изображений
+MINIO_FOLDER_LOGS_NAME = os.getenv(
+    "MINIO_FOLDER_LOGS_NAME"
+)  # Место, куда сохраняются логи контекста
 
 MILVUS_DB_NAME = os.getenv("MILVUS_DB_NAME")  # БД коллекций Милвуса(БД)
 MILVUS_COLLECTION = os.getenv("MILVUS_COLLECTION")  # Коллекция Милвуса(БД)
@@ -42,7 +47,7 @@ if not private_key:
     raise ValueError("GOOGLE_PRIVATE_KEY is not set")
 private_key = private_key.replace("\\n", "\n")
 
-google_credentials = { #Тут все ключи для работы API от гугл щит
+google_credentials = {  # Тут все ключи для работы API от гугл щит
     "type": os.getenv("GOOGLE_TYPE"),
     "project_id": os.getenv("GOOGLE_PROJECT_ID"),
     "private_key_id": os.getenv("GOOGLE_PRIVATE_KEY_ID"),
@@ -55,6 +60,7 @@ google_credentials = { #Тут все ключи для работы API от г
     "client_x509_cert_url": os.getenv("GOOGLE_CLIENT_CERT_URL"),
 }
 
+URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
 firts_message_from_tg_bot = "Привет! Я асистент для инженеров, можешь задать мне вопрос"
 
 # Устанавливаем ключ OpenAI API
@@ -187,9 +193,6 @@ def save_user_question_to_sheet(user_message, gpt_response, user_tag, log_filena
     )  # Запись номера теста, вопроса, ответа GPT, оценки (пусто), и тега пользователя
 
 
-# Функция для обработки сообщений
-from telegram import InputMediaPhoto
-
 user_image_context = {}
 
 
@@ -218,7 +221,9 @@ def filter_and_prioritize_context(
         elif related_table:
             # Проверяем, есть ли связь с таблицей
             if related_table not in added_tables:
-                table_content = read_table_from_minio(f"{MINIO_FOLDER_DOCS_NAME}/{related_table}")
+                table_content = read_table_from_minio(
+                    f"{MINIO_FOLDER_DOCS_NAME}/{related_table}"
+                )
                 if table_content:
                     table_name = next(
                         (
@@ -330,7 +335,9 @@ async def handle_message(update: Update, context):
             if ref.endswith(".csv"):  # Если это таблица
                 if ref not in unique_table_references:
                     unique_table_references.add(ref)
-                    table_content = read_table_from_minio(f"{MINIO_FOLDER_DOCS_NAME}/{ref}")
+                    table_content = read_table_from_minio(
+                        f"{MINIO_FOLDER_DOCS_NAME}/{ref}"
+                    )
                     if table_content:
                         table_name = most_similar_texts[i]
                         table_contexts.append(f"{table_name}:\n{table_content}")
@@ -354,7 +361,7 @@ async def handle_message(update: Update, context):
 
         token_count = count_tokens(context_text)
         logger.info(f"Контекст содержит {token_count} токенов")
-        logger.info(f"Используемый контекст: {context_text}")
+        # logger.info(f"Используемый контекст: {context_text}")
 
         # Ищем упоминания рисунков в ответе и создаем ссылки на них
         all_image_mentions = find_image_mentions(context_text)
@@ -365,10 +372,9 @@ async def handle_message(update: Update, context):
                 images_to_mention.append((image_text, image_ref))
 
         images_text = "\n".join([img[0] for img in images_to_mention])
-        
+
         # Отправка всего контекста к GPT
         response = openai.chat.completions.create(
-            
             model=MODEL_GPT_INT,
             messages=[
                 {
@@ -385,12 +391,14 @@ async def handle_message(update: Update, context):
                 {
                     "role": "system",
                     "content": f"Дополнительные изображения по вашему запросу:\n\n{images_text}\n\n"
-                    f"Вот релевантная информация:\n\n{context_text}"
+                    f"Вот релевантная информация:\n\n{context_text}",
                 },
-                {"role": "user", "content": user_message}
+                {"role": "user", "content": user_message},
             ],
             temperature=0.3,
         )
+        # logger.info(f"response ответа {response}")
+
         bot_reply = response.choices[0].message.content
         # Найти дополнительные упоминания рисунков, которые есть только в bot_reply
         additional_image_mentions = find_image_mentions(bot_reply)
@@ -499,6 +507,7 @@ def escape_markdown(text):
     return "".join(f"\\{char}" if char in escape_chars else char for char in text)
 
 
+# Доп поиск изображений в Milvus по Рисунок Х
 def find_image_mentions(text):
     pattern = r"Рисунок \d+"
     return re.findall(pattern, text)
@@ -533,6 +542,7 @@ def get_unique_log_filename(user_tag):
     return f"context_log_{sanitized_tag}_{timestamp}.txt"
 
 
+# Создается лог файл
 def save_context_to_log(user_tag, context_text):
     # Генерируем уникальное имя для лог-файла
     unique_log_filename = get_unique_log_filename(user_tag)
@@ -561,6 +571,19 @@ async def handle_feedback(update: Update, context):
     await update.message.reply_text("Спасибо за вашу оценку!")
 
 
+# Отчищает сообщения, полученные в момент отключения
+def clear_message_bot():
+    # Установка offset, чтобы удалить все накопленные сообщения
+    response = requests.get(URL)
+    updates = response.json()
+    if updates["result"]:
+        last_update_id = updates["result"][-1]["update_id"]
+        clear_url = f"{URL}?offset={last_update_id + 1}"
+        requests.get(clear_url)
+
+    print("Очередь сообщений очищена.")
+
+
 # Основная функция для запуска бота
 def main():
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
@@ -578,7 +601,12 @@ def main():
         )
     )
     logger.info("Бот запущен.")
+    clear_message_bot()
     application.run_polling()
+    """application.run_webhook(
+        listen="localhost", port=80, webhook_url="https://exapmle.com:80"
+    )  # Тест через JMeter. Включаешь это и выключаешь "application.run_polling()"
+"""
 
 
 if __name__ == "__main__":
