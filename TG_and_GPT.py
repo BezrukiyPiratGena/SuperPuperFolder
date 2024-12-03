@@ -575,13 +575,32 @@ async def handle_feedback(update: Update, context):
 def clear_message_bot():
     # Установка offset, чтобы удалить все накопленные сообщения
     response = requests.get(URL)
-    updates = response.json()
-    if updates["result"]:
-        last_update_id = updates["result"][-1]["update_id"]
-        clear_url = f"{URL}?offset={last_update_id + 1}"
-        requests.get(clear_url)
+    if response.status_code == 200:
+        updates = response.json()
 
-    print("Очередь сообщений очищена.")
+        # Проверяем наличие ключа 'result' и его содержимое
+        if "result" in updates and updates["result"]:
+            for update in updates["result"]:
+                # Извлекаем данные
+                username = (
+                    update.get("message", {})
+                    .get("from", {})
+                    .get("username", "Неизвестный пользователь")
+                )
+                text = update.get("message", {}).get("text", "Без текста")
+
+                # Логируем только нужную информацию
+                print(f"Пользователь {username} отправил сообщение: {text}")
+
+            # Очищаем очередь сообщений
+            last_update_id = updates["result"][-1]["update_id"]
+            clear_url = f"{URL}?offset={last_update_id + 1}"
+            requests.get(clear_url)
+            print("Очередь сообщений очищена.")
+        else:
+            print("Нет новых сообщений.")
+    else:
+        print(f"Ошибка API Telegram: {response.status_code}, {response.text}")
 
 
 # Основная функция для запуска бота
@@ -606,7 +625,7 @@ def main():
     """application.run_webhook(
         listen="localhost", port=80, webhook_url="https://exapmle.com:80"
     )  # Тест через JMeter. Включаешь это и выключаешь "application.run_polling()"
-"""
+    """
 
 
 if __name__ == "__main__":
