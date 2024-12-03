@@ -127,7 +127,7 @@ for collection_name in all_collections:
         print(f"Коллекция {collection_name} не активна или не загружена: {e}")
 
 
-# Функция для создания эмбеддинга запроса пользователя
+# Метод для создания эмбеддинга запроса пользователя
 def create_embedding_for_query(query):
     response = openai.embeddings.create(
         input=[query],
@@ -136,7 +136,7 @@ def create_embedding_for_query(query):
     return response.data[0].embedding
 
 
-# Поиск наиболее релевантных эмбеддингов
+# Метод поиска наиболее релевантных эмбеддингов
 def find_most_similar(query_embedding, top_n=10):
     query_embedding_np = np.array([query_embedding], dtype=np.float32)
     similarities = np.dot(all_embeddings, query_embedding_np.T)
@@ -173,18 +173,19 @@ def read_table_from_minio(table_reference):
         return None
 
 
-# Функция для обработки команды /start
+# Метод для обработки команды /start
 async def start(update: Update, context):
     await update.message.reply_text(firts_message_from_tg_bot)
 
 
+# Метод подсчитывает токены для конкретного отрывка текста
 def count_tokens(text):
     encoding = tiktoken.encoding_for_model("text-embedding-ada-002")
     tokens = encoding.encode(text)
     return len(tokens)
 
 
-# Функция для записи вопроса пользователя в Google Таблицу
+# Метод для записи вопроса пользователя в Google Таблицу
 def save_user_question_to_sheet(user_message, gpt_response, user_tag, log_filename):
     next_row = len(sheet.get_all_values()) + 1  # Следующий номер строки
     sheet.update(
@@ -196,6 +197,7 @@ def save_user_question_to_sheet(user_message, gpt_response, user_tag, log_filena
 user_image_context = {}
 
 
+# Метод приоритизации поиска релевантных данных
 def filter_and_prioritize_context(
     most_similar_texts, most_similar_refs, most_similar_related_tables
 ):
@@ -501,13 +503,7 @@ async def send_large_message(update, text, max_length=4000):
         await update.message.reply_text(current_message, parse_mode="HTML")
 
 
-def escape_markdown(text):
-    """Экранирует символы, требующие экранирования в MarkdownV2."""
-    escape_chars = r"_*[]()~>#+--=|{}.!"
-    return "".join(f"\\{char}" if char in escape_chars else char for char in text)
-
-
-# Доп поиск изображений в Milvus по Рисунок Х
+# Метод дополнительного поиск изображений в Milvus по Рисунок Х
 def find_image_mentions(text):
     pattern = r"Рисунок \d+"
     return re.findall(pattern, text)
@@ -526,7 +522,7 @@ def find_image_reference_in_milvus(figure_id):
     return None
 
 
-# Доработка лог файла с контекстом пользователя
+# Метод доработка лог файла с контекстом пользователя
 def sanitize_filename(filename):
     """Функция для удаления или замены недопустимых символов в названии файла."""
     return "".join(c if c.isalnum() or c in (" ", "_", "-") else "_" for c in filename)
@@ -542,7 +538,7 @@ def get_unique_log_filename(user_tag):
     return f"context_log_{sanitized_tag}_{timestamp}.txt"
 
 
-# Создается лог файл
+# Метод создания лог файл
 def save_context_to_log(user_tag, context_text):
     # Генерируем уникальное имя для лог-файла
     unique_log_filename = get_unique_log_filename(user_tag)
@@ -563,7 +559,7 @@ def save_context_to_log(user_tag, context_text):
     return log_key  # Возвращаем ключ файла в бакете вместо локального пути
 
 
-# Функция для обработки оценок
+# Метод для обработки оценок
 async def handle_feedback(update: Update, context):
     quality_score = update.message.text  # Получение оценки пользователя
     next_row = len(sheet.get_all_values())  # Нахождение строки для записи оценки
@@ -571,7 +567,7 @@ async def handle_feedback(update: Update, context):
     await update.message.reply_text("Спасибо за вашу оценку!")
 
 
-# Отчищает сообщения, полученные в момент отключения
+# Метод отчищает сообщения, полученные в момент отключения
 def clear_message_bot():
     # Установка offset, чтобы удалить все накопленные сообщения
     response = requests.get(URL)

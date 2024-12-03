@@ -24,24 +24,29 @@ import tiktoken
 
 # Загрузка переменных среды
 load_dotenv("tokens.env")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") # API токен OpenAI
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # API токен OpenAI
 
-MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY") # Логин для подключенияMiniO
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY") # Пароль для подключения MiniO
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT") # IP и порт MiniO
-MINIO_REGION_NAME = os.getenv("MINIO_REGION_NAME") # Регион MiniO
-MINIO_BUCKET_NAME = os.getenv("MINIO_BUCKET_NAME") # Название Бакета MiniO
-MINIO_FOLDER_DOCS_NAME = os.getenv("MINIO_FOLDER_DOCS_NAME") # Название Папки хранения таблиц/Изображений 
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")  # Логин для подключенияMiniO
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")  # Пароль для подключения MiniO
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")  # IP и порт MiniO
+MINIO_REGION_NAME = os.getenv("MINIO_REGION_NAME")  # Регион MiniO
+MINIO_BUCKET_NAME = os.getenv("MINIO_BUCKET_NAME")  # Название Бакета MiniO
+MINIO_FOLDER_DOCS_NAME = os.getenv(
+    "MINIO_FOLDER_DOCS_NAME"
+)  # Название Папки хранения таблиц/Изображений
 
-MILVUS_DB_NAME = os.getenv("MILVUS_DB_NAME") # БД коллекций Милвуса(БД)
-MILVUS_COLLECTION = os.getenv("MILVUS_COLLECTION") # Коллекция Милвуса(БД)
-MILVUS_HOST = os.getenv("MILVUS_HOST") # IP Милвуса(БД)
-MILVUS_PORT = os.getenv("MILVUS_PORT") # Порт Милвуса(БД)
+MILVUS_DB_NAME = os.getenv("MILVUS_DB_NAME")  # БД коллекций Милвуса(БД)
+MILVUS_COLLECTION = os.getenv("MILVUS_COLLECTION")  # Коллекция Милвуса(БД)
+MILVUS_HOST = os.getenv("MILVUS_HOST")  # IP Милвуса(БД)
+MILVUS_PORT = os.getenv("MILVUS_PORT")  # Порт Милвуса(БД)
 
 # Настройка важных переменных
 name_of_collection_milvus = MILVUS_COLLECTION
 name_of_bucket_minio = MINIO_BUCKET_NAME
 path_of_doc_for_convert = r"C:\Project1\GITProjects\myproject2\example_full.docx"
+description_milvus_collection = (
+    "Коллекция для хранения данных"  # Описание коллекции milvus
+)
 openai.api_key = OPENAI_API_KEY
 
 # Подключение к MinIO
@@ -77,7 +82,7 @@ if not utility.has_collection(collection_name):
         FieldSchema(name="figure_id", dtype=DataType.VARCHAR, max_length=100),
         FieldSchema(name="related_table", dtype=DataType.VARCHAR, max_length=65535),
     ]
-    schema = CollectionSchema(fields, description="Коллекция для хранения данных")
+    schema = CollectionSchema(fields, description=description_milvus_collection)
     collection = Collection(name=collection_name, schema=schema)
 else:
     collection = Collection(name=collection_name)
@@ -86,6 +91,7 @@ else:
 nlp = spacy.load("ru_core_news_lg")
 
 
+# Функция создает эмбеддинги ко всему тексту (описание рисунков, текста таблиц, любого текста)
 def create_embeddings(text, pause_duration=0.5):
     """Создает эмбеддинг текста с помощью OpenAI."""
     if not text.strip():
@@ -103,6 +109,7 @@ def create_embeddings(text, pause_duration=0.5):
         return None
 
 
+# Подсчет токенов какого-то отрывка текста
 def count_tokens(text, model="text-embedding-ada-002"):
     """
     Подсчитывает количество токенов в тексте для указанной модели OpenAI.
@@ -125,6 +132,7 @@ num_tokens = count_tokens(text)
 print(f"Количество токенов: {num_tokens}")
 
 
+# Функция создает лог блоки из текста вне таблиц
 def split_text_logically(text):
     """Разделяет текст на логические блоки."""
     doc = nlp(text)
@@ -140,6 +148,7 @@ def split_text_logically(text):
     return logical_blocks
 
 
+# Функция создает лог блоки из текста таблицы
 def split_table_text_logically(table_data, max_length=1000):
     """
     Разделяет текст таблицы на логические блоки, не разрывая строки между блоками.
@@ -175,6 +184,7 @@ def split_table_text_logically(table_data, max_length=1000):
     return logical_blocks
 
 
+# Функция сохраняет таблицу в MiniO в формате CSV
 def save_table_to_minio(bucket_name, table_name, table_data):
     """Сохраняет таблицу в MinIO в формате CSV."""
     csv_buffer = StringIO()
@@ -186,6 +196,7 @@ def save_table_to_minio(bucket_name, table_name, table_data):
     )
 
 
+# Функция сохраняет все рисунки из документа как JPEG
 def save_image_to_minio(bucket_name, image_name, image_data):
     """Сохраняет изображение в MinIO как JPEG файл и возвращает имя файла."""
     buffer = BytesIO()
@@ -206,6 +217,7 @@ def extract_figure_id(text):
     return ""
 
 
+# Функция обрабатывает Word документ, извлекая таблицы, текст, изображения из документа и сохраняя в MiniO
 def extract_content_from_word(word_path, bucket_name):
     """Извлекает текст, таблицы и изображения из Word файла, избегая дубликатов."""
     doc = Document(word_path)
@@ -361,6 +373,7 @@ def extract_content_from_word(word_path, bucket_name):
     return text_blocks_with_refs, " ".join(current_text_block)
 
 
+# Функция обрабатывает данные из Word, создает эмбеддинги и сохраняет все в Milvus
 def process_content_from_word(word_path, bucket_name):
     """Обрабатывает текст, таблицы и изображения из Word файла и сохраняет в Milvus."""
     successful_embeddings_count = 0
