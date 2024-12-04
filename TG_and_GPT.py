@@ -18,7 +18,11 @@ from google.oauth2.service_account import Credentials
 import requests
 
 # Загрузка переменных окружения из файла .env
-load_dotenv("tokens.env")
+load_dotenv("keys_google_sheet.env")
+load_dotenv("keys_gpt_telegram.env")
+load_dotenv("keys_milvus.env")
+load_dotenv("keys_minio.env")
+
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # Токен ТГ Бота
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # API токен OpenAI
 MODEL_GPT_INT = os.getenv("MODEL_GPT_INT")  # Модель ИИ, с которой ведется диалог
