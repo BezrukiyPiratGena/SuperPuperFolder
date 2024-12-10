@@ -23,7 +23,11 @@ import csv
 import tiktoken
 
 # Загрузка переменных среды
-load_dotenv("tokens.env")
+load_dotenv("keys_google_sheet.env")
+load_dotenv("keys_gpt_telegram.env")
+load_dotenv("keys_milvus.env")
+load_dotenv("keys_minio.env")
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # API токен OpenAI
 
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")  # Логин для подключенияMiniO
@@ -44,9 +48,7 @@ MILVUS_PORT = os.getenv("MILVUS_PORT")  # Порт Милвуса(БД)
 name_of_collection_milvus = MILVUS_COLLECTION
 name_of_bucket_minio = MINIO_BUCKET_NAME
 path_of_doc_for_convert = r"C:\Project1\GITProjects\myproject2\example_full.docx"
-description_milvus_collection = (
-    "Коллекция для хранения данных"  # Описание коллекции milvus
-)
+description_milvus_collection = "Инженерский справочник"  # Описание коллекции milvus
 openai.api_key = OPENAI_API_KEY
 
 # Подключение к MinIO
@@ -149,7 +151,7 @@ def split_text_logically(text):
 
 
 # Функция создает лог блоки из текста таблицы
-def split_table_text_logically(table_data, max_length=1000):
+def split_table_text_logically(table_data, max_length=500):
     """
     Разделяет текст таблицы на логические блоки, не разрывая строки между блоками.
 

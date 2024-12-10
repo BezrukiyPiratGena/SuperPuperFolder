@@ -217,10 +217,17 @@ def filter_and_prioritize_context(
         # Обработка таблиц
         if ref.endswith(".csv"):
             if ref not in added_tables:
-                table_content = read_table_from_minio(f"{MINIO_FOLDER_DOCS_NAME}/{ref}")
+                table_content = read_table_from_minio(
+                    f"{MINIO_FOLDER_DOCS_NAME}/{ref}"
+                )  # сюда ничего не пиши
                 if table_content:
-                    texts_and_tables.append((f"Таблица ({ref}):\n{table_content}", ref))
-                    added_tables.add(ref)
+                    # texts_and_tables.append(
+                    #    (
+                    #        f"Таблица аааа ({ref}):\n{table_content}",
+                    #        ref,
+                    #    )
+                    # )
+                    added_tables.add(ref)  # Сюда тоже ничего не пиши
                 else:
                     logger.warning(f"Не удалось прочитать таблицу: {ref}")
         # Обработка текста с родительской таблицей
@@ -240,7 +247,10 @@ def filter_and_prioritize_context(
                         "Безымянная таблица",
                     )
                     texts_and_tables.append(
-                        (f"Таблица ({table_name}):\n{table_content}", related_table)
+                        (
+                            f"Текстовый блок\n ({table_name}):\n{table_content} \nКонец текстового блока",
+                            related_table,
+                        )
                     )
                     added_tables.add(related_table)
 
@@ -316,14 +326,17 @@ async def handle_message(update: Update, context):
 
         # Формируем текст контекста из текстов и таблиц
         context_text = "\n\n".join(
-            [f"{obj[0]} ({obj[1]})" for obj in prioritized_texts_and_tables]
+            [f"{obj[0]}" for obj in prioritized_texts_and_tables]
+            # [f"{obj[0]} ({obj[1]})" for obj in prioritized_texts_and_tables] - закоментил, т.к. после текстового блока было системное имя родительной таблицы
         )
 
         # Добавляем изображения в контекст (если есть)
         if prioritized_images:
             context_text += "\n\nРисунки и текста:\n" + "\n".join(
                 [
-                    f"{img[0]} ({img[1]})" for img in prioritized_images
+                    # f"{img[0]} ({img[1]})" for img in prioritized_images - пока не нужен, img1 - столбик reference в Milvus
+                    f"{img[0]}"
+                    for img in prioritized_images
                 ]  # img[1] теперь берет related_table
             )
 
@@ -346,7 +359,9 @@ async def handle_message(update: Update, context):
                     )
                     if table_content:
                         table_name = most_similar_texts[i]
-                        table_contexts.append(f"{table_name}:\n{table_content}")
+                        table_contexts.append(
+                            f"{table_name}:\n{table_content}Конец таблицы"
+                        )
                         logger.info(f"Использована таблица из MinIO: {ref}")
                     else:
                         logger.warning(f"Пропущена таблица {ref} из-за ошибок чтения.")
@@ -367,7 +382,7 @@ async def handle_message(update: Update, context):
 
         token_count = count_tokens(context_text)
         logger.info(f"Контекст содержит {token_count} токенов")
-        # logger.info(f"Используемый контекст: {context_text}")
+        logger.info(f"Используемый контекст: {context_text}")
 
         # Ищем упоминания рисунков в ответе и создаем ссылки на них
         all_image_mentions = find_image_mentions(context_text)
@@ -392,6 +407,15 @@ async def handle_message(update: Update, context):
                         "Если в контексте будут таблицы, ты должен извлечь из них всю информацию (без вырезания информации), не сжимая ее и отправить эту таблицу в виде списка "
                         'Если в контексте в таблицах узаканы рисунки, ты должен учитывать их все в ответе в формате "Рисунок X" и не склоняя Рисунок Х'
                         "Если ты упоминаешь рисунки, то не склоняй Рисунка\Рисунки\Рисунков\Рисунке Х и т.д. Всегда пиши РисунОК Х"
+                        ""
+                        "При ответе указывай(если есть), из каких таблиц(В названии таблицы есть слово 'Таблица', не текстовый блок) был основан твой ответ, пиши её имя полностью."
+                        "не склоняй и не меняй форму названия таблицы"
+                        "Если НЕТ таблиц, на которых основан ответ, то НЕ пиши 'Таблицы, на которых основан ответ:отсутствуют'. Вообще пропусти эту строку"
+                        ""
+                        "При ответе указывай изображения, которые релевантны вопросу."
+                        "Не склоняй и не меняй форму названия изображений"
+                        ""
+                        "Если нет релевантных изображений/таблиц - Не пиши что 'релевантные изображения/таблицы:отсутствуют' или 'Таблицы, на которых основан ответ:- отсутствуют' если нет таких, то вообще ничего не пиши"
                     ),
                 },
                 {
