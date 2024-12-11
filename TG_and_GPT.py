@@ -386,7 +386,10 @@ async def handle_message(update: Update, context):
 
         # Ищем упоминания рисунков в ответе и создаем ссылки на них
         all_image_mentions = find_image_mentions(context_text)
+        all_image_mentions = find_table_mentions(context_text)
+
         images_to_mention = []
+        tables_to_mention = []
         for image_text in all_image_mentions:
             image_ref = find_image_reference_in_milvus(image_text)
             if image_ref:
@@ -409,10 +412,10 @@ async def handle_message(update: Update, context):
                         "Если ты упоминаешь рисунки, то не склоняй Рисунка\Рисунки\Рисунков\Рисунке Х и т.д. Всегда пиши РисунОК Х"
                         ""
                         "При ответе указывай(если есть), из каких таблиц(В названии таблицы есть слово 'Таблица', не текстовый блок) был основан твой ответ, пиши её имя полностью."
-                        "не склоняй и не меняй форму названия таблицы"
+                        "не склоняй и не меняй форму названия таблицы, если упоминаешь, то пиши Таблица"
                         "Если НЕТ таблиц, на которых основан ответ, то НЕ пиши 'Таблицы, на которых основан ответ:отсутствуют'. Вообще пропусти эту строку"
                         ""
-                        "При ответе указывай изображения, которые релевантны вопросу."
+                        # "При ответе указывай изображения, которые релевантны вопросу."
                         "Не склоняй и не меняй форму названия изображений"
                         ""
                         "Если нет релевантных изображений/таблиц - Не пиши что 'релевантные изображения/таблицы:отсутствуют' или 'Таблицы, на которых основан ответ:- отсутствуют' если нет таких, то вообще ничего не пиши"
@@ -432,6 +435,8 @@ async def handle_message(update: Update, context):
         bot_reply = response.choices[0].message.content
         # Найти дополнительные упоминания рисунков, которые есть только в bot_reply
         additional_image_mentions = find_image_mentions(bot_reply)
+        additional_table_mentions = find_table_mentions(bot_reply)
+
         for image_text in additional_image_mentions:
             if image_text not in [mention[0] for mention in images_to_mention]:
                 # Если упоминание найдено в bot_reply, но не в контексте, ищем его ссылку
@@ -439,10 +444,18 @@ async def handle_message(update: Update, context):
                 if image_ref:
                     images_to_mention.append((image_text, image_ref))
 
+        for table_text in additional_table_mentions:
+            if table_text not in [mention[0] for mention in tables_to_mention]:
+                # Если упоминание найдено в bot_reply, но не в контексте, ищем его ссылку
+                table_ref = find_table_reference_in_milvus(table_text)
+                if table_ref:
+                    tables_to_mention.append((table_text, table_ref))
+
         bot_reply = response.choices[0].message.content
         # Замена символов < и > на HTML-эквиваленты
         bot_reply = bot_reply.replace("<", "&lt;").replace(">", "&gt;")
         formatted_reply = format_image_links(bot_reply, images_to_mention)
+        formatted_reply = format_table_links(formatted_reply, tables_to_mention)
         logger.info(f"Ответ от OpenAI: {formatted_reply}")
         await send_large_message(update, formatted_reply)
 
@@ -485,7 +498,9 @@ def format_image_links(bot_reply, images_to_mention):
     """Форматирует текст ответа, добавляя кликабельные ссылки на изображения."""
     for image_text, ref in images_to_mention:
         # Создаем URL для изображения
-        image_url = f"{MINIO_ENDPOINT}/{MINIO_BUCKET_NAME}/{ref}"
+        image_url = (
+            f"{MINIO_ENDPOINT}/{MINIO_BUCKET_NAME}/{MINIO_FOLDER_DOCS_NAME}/{ref}"
+        )
 
         # Формируем кликабельную ссылку в формате HTML
         link_text = f'<a href="{image_url}">{image_text}</a>'
@@ -493,6 +508,21 @@ def format_image_links(bot_reply, images_to_mention):
         # Заменяем все упоминания "Рисунок X" на кликабельную ссылку
         bot_reply = bot_reply.replace(image_text, link_text)
 
+    return bot_reply
+
+
+# Метод добавляет ссылки на упомянутые изображения в ответе GPT
+def format_table_links(bot_reply, tables_to_mention):
+    """Добавляет ссылки на таблицы в текст ответа."""
+    for table_text, ref in tables_to_mention:
+        table_url = (
+            f"{MINIO_ENDPOINT}/{MINIO_BUCKET_NAME}/{MINIO_FOLDER_DOCS_NAME}/{ref}"
+        )
+
+        # Создаем HTML-ссылку для таблицы
+        link_text = f'<a href="{table_url}">{table_text}</a>'
+        # Заменяем упоминания таблицы на ссылку
+        bot_reply = bot_reply.replace(table_text, link_text)
     return bot_reply
 
 
@@ -531,13 +561,32 @@ async def send_large_message(update, text, max_length=4000):
         await update.message.reply_text(current_message, parse_mode="HTML")
 
 
-# Метод дополнительного поиск изображений в Milvus по Рисунок Х
+# Метод дополнительного поиск упомянутых изображений в ответе GPT по Рисунок Х
 def find_image_mentions(text):
     pattern = r"Рисунок \d+"
     return re.findall(pattern, text)
 
 
+# Метод дополнительного поиск упомянутых таблиц в ответе GPT по Таблица ...
+def find_table_mentions(text):
+    pattern = r"Таблица \d+"  # Ищет фразы, начинающиеся с "Таблица"
+    return re.findall(pattern, text)
+
+
 def find_image_reference_in_milvus(figure_id):
+    collection = Collection(name=MILVUS_COLLECTION)
+    try:
+        result = collection.query(
+            expr=f'figure_id == "{figure_id}"', output_fields=["reference"]
+        )
+        if result:
+            return result[0]["reference"]
+    except Exception as e:
+        logger.error(f"Ошибка при поиске в Milvus для '{figure_id}': {e}")
+    return None
+
+
+def find_table_reference_in_milvus(figure_id):
     collection = Collection(name=MILVUS_COLLECTION)
     try:
         result = collection.query(

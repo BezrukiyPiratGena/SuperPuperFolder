@@ -219,6 +219,16 @@ def extract_figure_id(text):
     return ""
 
 
+# Функция для извлечения "Таблица Х" из названия таблицы
+def extract_table_id(text):
+    """
+    Извлекает идентификатор таблицы в формате 'Таблица X' из текста.
+    Если идентификатор не найден, возвращает пустую строку.
+    """
+    match = re.search(r"(Таблица \d+)", text, re.IGNORECASE)
+    return match.group(1) if match else ""
+
+
 # Функция обрабатывает Word документ, извлекая таблицы, текст, изображения из документа и сохраняя в MiniO
 def extract_content_from_word(word_path, bucket_name):
     """Извлекает текст, таблицы и изображения из Word файла, избегая дубликатов."""
@@ -241,11 +251,14 @@ def extract_content_from_word(word_path, bucket_name):
                     save_table_to_minio(bucket_name, table_name, current_table_data)
                     # Сохраняем описание таблицы
                     explanation = current_text_block[-1] if current_text_block else ""
+
+                    table_id = extract_table_id(explanation)
+
                     text_blocks_with_refs.append(
                         {
                             "text": explanation,
                             "reference": table_name,
-                            "figure_id": "",
+                            "figure_id": table_id,
                             "related_table": "",
                         }
                     )
