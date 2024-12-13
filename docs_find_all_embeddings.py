@@ -1,7 +1,7 @@
 from ast import Index
 import re
 import time
-import docx
+from venv import logger
 import spacy
 import openai
 import os
@@ -17,10 +17,10 @@ from pymilvus import (
     utility,
 )
 from docx import Document
-from io import BytesIO, StringIO
+from io import BytesIO
 from PIL import Image
-import csv
 import tiktoken
+from openpyxl import Workbook
 
 # Загрузка переменных среды
 load_dotenv("keys_google_sheet.env")
@@ -151,17 +151,17 @@ def split_text_logically(text):
 
 
 # Функция создает лог блоки из текста таблицы
-def split_table_text_logically(table_data, max_length=500):
-    """
-    Разделяет текст таблицы на логические блоки, не разрывая строки между блоками.
-
-    Args:
-        table_data (list of list of str): Данные таблицы в виде списка строк, где каждая строка - это список ячеек.
-        max_length (int): Максимальное количество символов в одном логическом блоке.
-
-    Returns:
-        list of str: Список логических блоков текста таблицы.
-    """
+"""def split_table_text_logically(table_data, max_length=500):
+    
+    #Разделяет текст таблицы на логические блоки, не разрывая строки между блоками.
+    #
+    #Args:
+    #    table_data (list of list of str): Данные таблицы в виде списка строк, где каждая строка - это список ячеек.
+    #    max_length (int): Максимальное количество символов в одном логическом блоке.
+    #
+    #Returns:
+    #    list of str: Список логических блоков текста таблицы.
+    #
     logical_blocks = []
     current_block = ""
 
@@ -183,19 +183,54 @@ def split_table_text_logically(table_data, max_length=500):
     if current_block:  # Добавляем оставшийся блок
         logical_blocks.append(current_block)
 
+    return logical_blocks"""
+
+
+def split_table_text_logically(table_data):
+    """
+    Разделяет таблицу на логические блоки, обрабатывая каждую строку индивидуально.
+
+    Args:
+        table_data (list of list of str): Данные таблицы в виде списка строк, где каждая строка - это список ячеек.
+
+    Returns:
+        list of str: Список текстовых строк таблицы.
+    """
+    logical_blocks = []
+
+    for row in table_data:
+        # Объединяем ячейки строки через табуляцию
+        row_text = "\t".join(row)
+        logical_blocks.append(row_text)  # Добавляем строку как отдельный блок
+
     return logical_blocks
 
 
-# Функция сохраняет таблицу в MiniO в формате CSV
+# Функция сохраняет таблицу в MiniO в формате XLSX
 def save_table_to_minio(bucket_name, table_name, table_data):
-    """Сохраняет таблицу в MinIO в формате CSV."""
-    csv_buffer = StringIO()
-    writer = csv.writer(csv_buffer)
+    """Сохраняет таблицу в MinIO в формате XLSX"""
+    workbook = Workbook()
+    sheet = workbook.active
+
+    # Добавляем строки таблицы в Excel
     for row_data in table_data:
-        writer.writerow(row_data)
+        sheet.append(row_data)
+
+    # Сохраняем данные в буфер для XLSX
+    buffer_xlsx = BytesIO()
+    workbook.save(buffer_xlsx)
+    buffer_xlsx.seek(0)
+
+    # Сохраняем XLSX в MinIO
+    xlsx_key = f"{MINIO_FOLDER_DOCS_NAME}/{table_name}.xlsx"
     s3_client.put_object(
-        Bucket=bucket_name, Key=table_name, Body=csv_buffer.getvalue().encode("utf-8")
+        Bucket=bucket_name,
+        Key=xlsx_key,
+        Body=buffer_xlsx,
+        ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ContentDisposition="inline",  # Указывает браузеру открывать файл, а не скачивать
     )
+    print(f"Таблица сохранена в MinIO как {table_name}.xlsx")
 
 
 # Функция сохраняет все рисунки из документа как JPEG
@@ -206,7 +241,13 @@ def save_image_to_minio(bucket_name, image_name, image_data):
         "RGB"
     )  # Конвертируем изображение в RGB перед сохранением
     image_data.save(buffer, format="JPEG")
-    s3_client.put_object(Bucket=bucket_name, Key=image_name, Body=buffer.getvalue())
+    s3_client.put_object(
+        Bucket=bucket_name,
+        Key=f"{MINIO_FOLDER_DOCS_NAME}/{image_name}",
+        Body=buffer.getvalue(),
+        ContentType="image/jpeg",  # MIME-тип изображения
+        ContentDisposition="inline",  # Указывает браузеру открывать файл, а не скачивать
+    )
     print(f"Изображение загружено в MinIO как {image_name}")
     return image_name  # Возвращаем имя файла вместо ссылки
 
@@ -247,7 +288,8 @@ def extract_content_from_word(word_path, bucket_name):
             if paragraph:
                 if last_was_table and current_table_data:
                     # Сохраняем текущую собранную таблицу в MinIO как одну таблицу
-                    table_name = f"table_{table_counter}.csv"
+                    table_name = f"table_{table_counter}"
+                    table_name_xlsx = f"{table_name}.xlsx"
                     save_table_to_minio(bucket_name, table_name, current_table_data)
                     # Сохраняем описание таблицы
                     explanation = current_text_block[-1] if current_text_block else ""
@@ -257,7 +299,7 @@ def extract_content_from_word(word_path, bucket_name):
                     text_blocks_with_refs.append(
                         {
                             "text": explanation,
-                            "reference": table_name,
+                            "reference": table_name_xlsx,
                             "figure_id": table_id,
                             "related_table": "",
                         }
@@ -270,7 +312,7 @@ def extract_content_from_word(word_path, bucket_name):
                                 "text": block,
                                 "reference": "",
                                 "figure_id": "",
-                                "related_table": table_name,
+                                "related_table": table_name_xlsx,
                             }
                         )
                     current_table_data = []  # Сброс текущих данных таблицы
@@ -328,11 +370,11 @@ def extract_content_from_word(word_path, bucket_name):
                                         "text": text_after_image,
                                         "reference": image_name,
                                         "figure_id": figure_id,
-                                        "related_table": f"table_{table_counter}.csv",  # Смещение на 1 для таблицы
+                                        "related_table": f"table_{table_counter}.xlsx",  # Смещение на 1 для таблицы
                                     }
                                 )
                                 print(
-                                    f"Изображение {image_name} загружено с описанием: {text_after_image}, figure_id: {figure_id}, related_table: {table_name}"
+                                    f"Изображение {image_name} загружено с описанием: {text_after_image}, figure_id: {figure_id}, related_table: {table_name_xlsx}"
                                 )
                                 image_counter += 1
             last_was_table = True

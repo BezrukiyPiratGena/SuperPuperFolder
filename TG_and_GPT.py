@@ -17,6 +17,10 @@ from datetime import datetime
 from google.oauth2.service_account import Credentials
 import requests
 
+from openpyxl import load_workbook  # работа с xlsx
+from io import StringIO
+from io import BytesIO
+
 # Загрузка переменных окружения из файла .env
 load_dotenv("keys_google_sheet.env")
 load_dotenv("keys_gpt_telegram.env")
@@ -141,7 +145,7 @@ def create_embedding_for_query(query):
 
 
 # Метод поиска наиболее релевантных эмбеддингов
-def find_most_similar(query_embedding, top_n=10):
+def find_most_similar(query_embedding, top_n=20):
     query_embedding_np = np.array([query_embedding], dtype=np.float32)
     similarities = np.dot(all_embeddings, query_embedding_np.T)
     most_similar_indices = np.argsort(similarities, axis=0)[::-1][:top_n]
@@ -159,16 +163,17 @@ def read_table_from_minio(table_reference):
     """Читает таблицу из MinIO и возвращает её содержимое в виде текста."""
     try:
         response = s3_client.get_object(Bucket=MINIO_BUCKET_NAME, Key=table_reference)
-        try:
-            # Попытка декодировать как utf-8
-            table_content = response["Body"].read().decode("utf-8")
-            return table_content
-        except UnicodeDecodeError:
-            # Логгируем ошибку, если не удается декодировать данные
-            logger.error(
-                f"Не удалось декодировать содержимое таблицы {table_reference} как utf-8."
-            )
-            return None
+        buffer = BytesIO(response["Body"].read())  # Считываем файл в память
+        workbook = load_workbook(buffer)  # Открываем файл как xlsx
+        sheet = workbook.active  # Используем первый лист
+
+        # Преобразуем содержимое таблицы в строковый формат
+        table_content = ""
+        for row in sheet.iter_rows(values_only=True):
+            row_content = "\t".join(map(str, row))  # Преобразуем каждую строку
+            table_content += row_content + "\n"
+
+        return table_content.strip()
     except NoCredentialsError as e:
         logger.error(f"Ошибка аутентификации в MinIO: {e}")
         return None
@@ -215,7 +220,7 @@ def filter_and_prioritize_context(
         related_table = most_similar_related_tables[i]
 
         # Обработка таблиц
-        if ref.endswith(".csv"):
+        if ref.endswith(".xlsx"):
             if ref not in added_tables:
                 table_content = read_table_from_minio(
                     f"{MINIO_FOLDER_DOCS_NAME}/{ref}"
@@ -351,7 +356,7 @@ async def handle_message(update: Update, context):
 
         # Проверяем таблицы и ищем изображения
         for i, ref in enumerate(most_similar_refs):
-            if ref.endswith(".csv"):  # Если это таблица
+            if ref.endswith(".xlsx"):  # Если это таблица
                 if ref not in unique_table_references:
                     unique_table_references.add(ref)
                     table_content = read_table_from_minio(
@@ -360,7 +365,7 @@ async def handle_message(update: Update, context):
                     if table_content:
                         table_name = most_similar_texts[i]
                         table_contexts.append(
-                            f"{table_name}:\n{table_content}Конец таблицы"
+                            f"-------\nНачало\n{table_name}:\n{table_content}\nКонец таблицы",
                         )
                         logger.info(f"Использована таблица из MinIO: {ref}")
                     else:
@@ -386,7 +391,8 @@ async def handle_message(update: Update, context):
 
         # Ищем упоминания рисунков в ответе и создаем ссылки на них
         all_image_mentions = find_image_mentions(context_text)
-        all_image_mentions = find_table_mentions(context_text)
+        # all_image_mentions = find_table_mentions(context_text) - ссылки на таблицы
+        all_table_mentions = find_table_mentions(context_text)
 
         images_to_mention = []
         tables_to_mention = []
@@ -396,6 +402,11 @@ async def handle_message(update: Update, context):
                 images_to_mention.append((image_text, image_ref))
 
         images_text = "\n".join([img[0] for img in images_to_mention])
+
+        for table_text in all_table_mentions:
+            table_ref = find_image_reference_in_milvus(table_text)
+            if table_ref:
+                tables_to_mention.append((table_text, table_ref))
 
         # Отправка всего контекста к GPT
         response = openai.chat.completions.create(
@@ -410,13 +421,13 @@ async def handle_message(update: Update, context):
                         "Если в контексте будут таблицы, ты должен извлечь из них всю информацию (без вырезания информации), не сжимая ее и отправить эту таблицу в виде списка "
                         'Если в контексте в таблицах узаканы рисунки, ты должен учитывать их все в ответе в формате "Рисунок X" и не склоняя Рисунок Х'
                         "Если ты упоминаешь рисунки, то не склоняй Рисунка\Рисунки\Рисунков\Рисунке Х и т.д. Всегда пиши РисунОК Х"
+                        "Если ты упоминаешь таблицы, то не склоняй Таблицы\Таблиц\Таблице Х и т.д. Всегда пиши ТаблиЦА Х"
                         ""
-                        "При ответе указывай(если есть), из каких таблиц(В названии таблицы есть слово 'Таблица', не текстовый блок) был основан твой ответ, пиши её имя полностью."
+                        "Всегда при ответе указывай, на основе каких таблиц(В названии таблицы есть слово 'Таблица ') была основана большая часть твоего ответа, пиши её имя полностью."
                         "не склоняй и не меняй форму названия таблицы, если упоминаешь, то пиши Таблица"
-                        "Если НЕТ таблиц, на которых основан ответ, то НЕ пиши 'Таблицы, на которых основан ответ:отсутствуют'. Вообще пропусти эту строку"
+                        # "Если НЕТ таблиц, на основе которых основан ответ, то НЕ пиши 'Таблицы, на которых основан ответ:отсутствуют'. Вообще пропусти эту строку"
                         ""
-                        # "При ответе указывай изображения, которые релевантны вопросу."
-                        "Не склоняй и не меняй форму названия изображений"
+                        "Не склоняй и не меняй форму названия изображений. Всегда пиши Рисунок Х"
                         ""
                         "Если нет релевантных изображений/таблиц - Не пиши что 'релевантные изображения/таблицы:отсутствуют' или 'Таблицы, на которых основан ответ:- отсутствуют' если нет таких, то вообще ничего не пиши"
                     ),
@@ -455,7 +466,7 @@ async def handle_message(update: Update, context):
         # Замена символов < и > на HTML-эквиваленты
         bot_reply = bot_reply.replace("<", "&lt;").replace(">", "&gt;")
         formatted_reply = format_image_links(bot_reply, images_to_mention)
-        formatted_reply = format_table_links(formatted_reply, tables_to_mention)
+        await send_table_to_chat(update, tables_to_mention, formatted_reply)
         logger.info(f"Ответ от OpenAI: {formatted_reply}")
         await send_large_message(update, formatted_reply)
 
@@ -484,7 +495,8 @@ def search_by_figure_id(figure_id):
     collection = Collection(name=MILVUS_COLLECTION)
     try:
         result = collection.query(
-            expr=f'figure_id == "{figure_id}"', output_fields=["text"]
+            expr=f'figure_id == "{figure_id.strip()}"',  # Удаляем лишние пробелы
+            output_fields=["text", "reference"],
         )
         if result:
             return result[0]["text"]
@@ -501,9 +513,9 @@ def format_image_links(bot_reply, images_to_mention):
         image_url = (
             f"{MINIO_ENDPOINT}/{MINIO_BUCKET_NAME}/{MINIO_FOLDER_DOCS_NAME}/{ref}"
         )
-
+        # logger.info(f"найденные все картинки - {image_text} {ref}")
         # Формируем кликабельную ссылку в формате HTML
-        link_text = f'<a href="{image_url}">{image_text}</a>'
+        link_text = f'<a href="{image_url}" target="_blank">{image_text}</a>'
 
         # Заменяем все упоминания "Рисунок X" на кликабельную ссылку
         bot_reply = bot_reply.replace(image_text, link_text)
@@ -511,19 +523,49 @@ def format_image_links(bot_reply, images_to_mention):
     return bot_reply
 
 
-# Метод добавляет ссылки на упомянутые изображения в ответе GPT
-def format_table_links(bot_reply, tables_to_mention):
-    """Добавляет ссылки на таблицы в текст ответа."""
-    for table_text, ref in tables_to_mention:
-        table_url = (
-            f"{MINIO_ENDPOINT}/{MINIO_BUCKET_NAME}/{MINIO_FOLDER_DOCS_NAME}/{ref}"
-        )
+# Метод, находящий в MiniO таблички по упоминанию "Таблица Х"
+async def send_table_to_chat(update, tables_to_mention, formatted_reply):
+    """
+    Находит таблицы в MinIO по упоминанию, проверяет их присутствие в ответе GPT,
+    исключает повторную отправку и отправляет их в чат Telegram.
+    """
+    sent_tables = set()  # Хранилище для уже отправленных таблиц
 
-        # Создаем HTML-ссылку для таблицы
-        link_text = f'<a href="{table_url}">{table_text}</a>'
-        # Заменяем упоминания таблицы на ссылку
-        bot_reply = bot_reply.replace(table_text, link_text)
-    return bot_reply
+    for table_text, ref in tables_to_mention:
+        # Проверяем, упоминается ли таблица в ответе GPT
+        if table_text not in formatted_reply:
+            # logger.info(
+            #    f"Таблица {table_text} не упоминается в ответе GPT и будет пропущена."
+            # )
+            continue
+
+        # Проверяем, отправлялась ли таблица ранее
+        if ref in sent_tables:
+            # logger.info(f"Таблица {table_text} уже была отправлена ранее. Пропускаем.")
+            continue
+
+        logger.info(f"Обработка таблицы: {table_text} с системным именем {ref}")
+        try:
+            # Проверяем существование таблицы в MinIO
+            table_key = f"{MINIO_FOLDER_DOCS_NAME}/{ref}"
+            response = s3_client.get_object(Bucket=MINIO_BUCKET_NAME, Key=table_key)
+            file_data = response["Body"].read()
+
+            # Отправляем таблицу пользователю как документ
+            await update.message.reply_document(
+                document=BytesIO(file_data),
+                filename=f"{table_text}.xlsx",
+                # caption=f"Таблица {table_text} из вашего запроса.",
+            )
+            # logger.info(f"Таблица {table_text} успешно отправлена.")
+
+            # Добавляем таблицу в список отправленных
+            sent_tables.add(ref)
+        except Exception as e:
+            logger.error(f"Не удалось отправить таблицу {table_text}: {e}")
+            await update.message.reply_text(
+                f"Ошибка при отправке таблицы {table_text}."
+            )
 
 
 # Метод, разделяющий сообщения от ТГ Бота по 4000 символов с лог заглючением по абзацам
@@ -646,6 +688,7 @@ async def handle_feedback(update: Update, context):
 
 # Метод отчищает сообщения, полученные в момент отключения
 def clear_message_bot():
+
     # Установка offset, чтобы удалить все накопленные сообщения
     response = requests.get(URL)
     if response.status_code == 200:
