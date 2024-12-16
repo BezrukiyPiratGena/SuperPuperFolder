@@ -43,7 +43,8 @@ MINIO_FOLDER_LOGS_NAME = os.getenv(
     "MINIO_FOLDER_LOGS_NAME"
 )  # Место, куда сохраняются логи контекста
 
-MILVUS_DB_NAME = os.getenv("MILVUS_DB_NAME")  # БД коллекций Милвуса(БД)
+MILVUS_DB_NAME_FIRST = os.getenv("MILVUS_DB_NAME_FIRST")  # БД коллекций Милвуса(БД)
+MILVUS_DB_NAME_SECOND = os.getenv("MILVUS_DB_NAME_SECOND")  # БД коллекций Милвуса(БД)
 MILVUS_COLLECTION = os.getenv("MILVUS_COLLECTION")  # Коллекция Милвуса(БД)
 MILVUS_HOST = os.getenv("MILVUS_HOST")  # IP Милвуса(БД)
 MILVUS_PORT = os.getenv("MILVUS_PORT")  # Порт Милвуса(БД)
@@ -100,7 +101,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Подключаемся к Milvus
-connections.connect(MILVUS_DB_NAME, host=MILVUS_HOST, port=MILVUS_PORT)
+connections.connect(alias="default", host=MILVUS_HOST, port=MILVUS_PORT)
 
 # Получаем список всех коллекций в базе данных
 all_collections = utility.list_collections()
@@ -466,9 +467,9 @@ async def handle_message(update: Update, context):
         # Замена символов < и > на HTML-эквиваленты
         bot_reply = bot_reply.replace("<", "&lt;").replace(">", "&gt;")
         formatted_reply = format_image_links(bot_reply, images_to_mention)
-        await send_table_to_chat(update, tables_to_mention, formatted_reply)
         logger.info(f"Ответ от OpenAI: {formatted_reply}")
         await send_large_message(update, formatted_reply)
+        await send_table_to_chat(update, tables_to_mention, formatted_reply)
 
         images_to_send = []
         for image_text, ref in images_to_mention:

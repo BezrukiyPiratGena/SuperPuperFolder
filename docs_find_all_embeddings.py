@@ -39,16 +39,24 @@ MINIO_FOLDER_DOCS_NAME = os.getenv(
     "MINIO_FOLDER_DOCS_NAME"
 )  # Название Папки хранения таблиц/Изображений
 
-MILVUS_DB_NAME = os.getenv("MILVUS_DB_NAME")  # БД коллекций Милвуса(БД)
+MILVUS_DB_NAME_FIRST = os.getenv(
+    "MILVUS_DB_NAME_FIRST"
+)  # БД коллекций Милвуса(БД) с справочником
+MILVUS_DB_NAME_SECOND = os.getenv(
+    "MILVUS_DB_NAME_SECOND"
+)  # БД коллекций Милвуса(БД) с мануалами
 MILVUS_COLLECTION = os.getenv("MILVUS_COLLECTION")  # Коллекция Милвуса(БД)
 MILVUS_HOST = os.getenv("MILVUS_HOST")  # IP Милвуса(БД)
 MILVUS_PORT = os.getenv("MILVUS_PORT")  # Порт Милвуса(БД)
 
 # Настройка важных переменных
+# change_db_of_milvus = MILVUS_DB_NAME_FIRST  # <================================= Выбери бд, в которую будет записываться инфа
+change_db_of_milvus = MILVUS_DB_NAME_SECOND  # <================================= Выбери бд, в которую будет записываться инфа
 name_of_collection_milvus = MILVUS_COLLECTION
+
 name_of_bucket_minio = MINIO_BUCKET_NAME
-path_of_doc_for_convert = r"C:\Project1\GITProjects\myproject2\example_full.docx"
-description_milvus_collection = "Инженерский справочник"  # Описание коллекции milvus
+path_of_doc_for_convert = r"C:\Project1\GITProjects\myproject2\Smurfs.docx"  # <============== Путь к файлу для добавления его в БД
+description_milvus_collection = "Смурфики инфа"  # Описание коллекции milvus
 openai.api_key = OPENAI_API_KEY
 
 # Подключение к MinIO
@@ -63,7 +71,9 @@ print(f'Логин "{MINIO_ACCESS_KEY}" для БД MiniO')  # Проверка 
 print(f'Пароль "{MINIO_SECRET_KEY}" для БД MiniO')  # Проверка PSWD
 
 # Подключение к Milvus
-connections.connect(MILVUS_DB_NAME, host=MILVUS_HOST, port=MILVUS_PORT)
+connections.connect(
+    alias="default", host=MILVUS_HOST, port=MILVUS_PORT, db_name=change_db_of_milvus
+)
 
 # Создание бакета MinIO, если он не существует
 if s3_client.list_buckets().get("Buckets", None):
@@ -483,4 +493,6 @@ index_params = {"index_type": "IVF_FLAT", "metric_type": "L2", "params": {"nlist
 collection.create_index(field_name="embedding", index_params=index_params)
 collection.load()
 
-print(f"Индекс успешно создан и коллекция '{collection_name}' загружена.")
+print(
+    f"Индекс успешно создан и коллекция '{collection_name}' загружена в БД '{change_db_of_milvus}'."
+)
