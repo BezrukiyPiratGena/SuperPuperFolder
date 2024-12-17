@@ -4,10 +4,18 @@ import os
 import numpy as np
 import gspread  # Библиотека для работы с Google Sheets
 from google.oauth2.service_account import Credentials
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
+from telegram import InlineKeyboardMarkup, Update, ReplyKeyboardMarkup
+from telegram._inline.inlinekeyboardbutton import InlineKeyboardButton
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 from dotenv import load_dotenv
 from pymilvus import connections, Collection, utility
+from telegram.ext._handlers.callbackqueryhandler import CallbackQueryHandler
 import tiktoken
 import boto3  # Библиотека для работы с MinIO (S3 совместимое API)
 from botocore.exceptions import NoCredentialsError
@@ -36,18 +44,29 @@ MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")  # Пароль для подк
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")  # IP и порт MiniO
 MINIO_REGION_NAME = os.getenv("MINIO_REGION_NAME")  # Регион MiniO
 MINIO_BUCKET_NAME = os.getenv("MINIO_BUCKET_NAME")  # Название Бакета MiniO
-MINIO_FOLDER_DOCS_NAME = os.getenv(
-    "MINIO_FOLDER_DOCS_NAME"
-)  # Название Папки хранения таблиц/Изображений
+MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK = os.getenv(
+    "MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK"
+)  # Название Папки хранения Таблиц/Изображений Справочника инженеров
+MINIO_FOLDER_DOCS_NAME_MANUAL = os.getenv(
+    "MINIO_FOLDER_DOCS_NAME_MANUAL"
+)  # Название Папки хранения Таблиц/Изображений Мануала
 MINIO_FOLDER_LOGS_NAME = os.getenv(
     "MINIO_FOLDER_LOGS_NAME"
 )  # Место, куда сохраняются логи контекста
 
-MILVUS_DB_NAME_FIRST = os.getenv("MILVUS_DB_NAME_FIRST")  # БД коллекций Милвуса(БД)
-MILVUS_DB_NAME_SECOND = os.getenv("MILVUS_DB_NAME_SECOND")  # БД коллекций Милвуса(БД)
-MILVUS_COLLECTION = os.getenv("MILVUS_COLLECTION")  # Коллекция Милвуса(БД)
-MILVUS_HOST = os.getenv("MILVUS_HOST")  # IP Милвуса(БД)
-MILVUS_PORT = os.getenv("MILVUS_PORT")  # Порт Милвуса(БД)
+
+MILVUS_DB_NAME_FIRST = os.getenv(
+    "MILVUS_DB_NAME_FIRST"
+)  # БД коллекций Милвуса c справочником
+MILVUS_DB_NAME_SECOND = os.getenv(
+    "MILVUS_DB_NAME_SECOND"
+)  # БД коллекций Милвуса с мануалами
+MIVLUS_COLLECTION_SPRAVOCHNIK = os.getenv(
+    "MIVLUS_COLLECTION_SPRAVOCHNIK"
+)  # Коллекция Милвуса Справочника инженеров
+MILVUS_COLLECTION = os.getenv("MILVUS_COLLECTION")  # Коллекция Милвуса
+MILVUS_HOST = os.getenv("MILVUS_HOST")  # IP Милвуса
+MILVUS_PORT = os.getenv("MILVUS_PORT")  # Порт Милвуса
 
 SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")  # ID Google Таблицы MODEL_GPT_INT
 
@@ -71,6 +90,10 @@ google_credentials = {  # Тут все ключи для работы API от 
 
 URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
 firts_message_from_tg_bot = "Привет! Я асистент для инженеров, можешь задать мне вопрос"
+
+minio_folder_docs_name = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK
+milvus_collection_name = MIVLUS_COLLECTION_SPRAVOCHNIK
+
 
 # Устанавливаем ключ OpenAI API
 openai.api_key = OPENAI_API_KEY
@@ -100,8 +123,11 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Подключаемся к Milvus
-connections.connect(alias="default", host=MILVUS_HOST, port=MILVUS_PORT)
+# Подключаемся к Milvus с справочником
+connections.connect(
+    alias="default", host=MILVUS_HOST, port=MILVUS_PORT, db_name=MILVUS_DB_NAME_FIRST
+)
+
 
 # Получаем список всех коллекций в базе данных
 all_collections = utility.list_collections()
@@ -136,6 +162,49 @@ for collection_name in all_collections:
         print(f"Коллекция {collection_name} не активна или не загружена: {e}")
 
 
+def load_collections_data():
+    """
+    Загружает коллекции и данные из текущей подключенной базы данных Milvus.
+    """
+
+    global all_collections, all_texts, all_embeddings, all_table_references, all_related_tables
+
+    # Очищаем старые данные
+    all_collections = utility.list_collections()
+    all_texts = []
+    all_embeddings = []
+    all_table_references = []
+    all_related_tables = []
+
+    # Загружаем данные из коллекций
+    for collection_name in all_collections:
+        collection = Collection(name=collection_name)
+
+        try:
+            if collection.num_entities > 0:
+                entities = collection.query(
+                    expr="id > 0",
+                    output_fields=["embedding", "text", "reference", "related_table"],
+                )
+                texts = [entity["text"] for entity in entities]
+                embeddings = [entity["embedding"] for entity in entities]
+                table_references = [entity["reference"] for entity in entities]
+                related_tables = [
+                    entity.get("related_table", "") for entity in entities
+                ]
+
+                all_texts.extend(texts)
+                all_embeddings.extend(embeddings)
+                all_table_references.extend(table_references)
+                all_related_tables.extend(related_tables)
+
+                logger.info(f"Коллекция {collection_name} успешно загружена.")
+        except Exception as e:
+            logger.error(
+                f"Коллекция {collection_name} не активна или не загружена: {e}"
+            )
+
+
 # Метод для создания эмбеддинга запроса пользователя
 def create_embedding_for_query(query):
     response = openai.embeddings.create(
@@ -160,32 +229,65 @@ def find_most_similar(query_embedding, top_n=20):
 
 
 # Чтение содержимого таблицы из MinIO (S3 хранилища)
-def read_table_from_minio(table_reference):
+def read_table_from_minio(table_reference, context):
     """Читает таблицу из MinIO и возвращает её содержимое в виде текста."""
+
+    folder_name = (
+        context.user_data.get("minio_folder_docs_name")
+        if context and hasattr(context, "user_data")
+        else MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK
+    )
+    if not folder_name:
+        folder_name = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK
+        logger.error(folder_name)
+        logger.error("Папка для MinIO не выбрана пользователем.")
+        logger.info(
+            "Используем папку по умолчанию для MinIO: MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK"
+        )
+
     try:
-        response = s3_client.get_object(Bucket=MINIO_BUCKET_NAME, Key=table_reference)
-        buffer = BytesIO(response["Body"].read())  # Считываем файл в память
-        workbook = load_workbook(buffer)  # Открываем файл как xlsx
-        sheet = workbook.active  # Используем первый лист
+        table_key = f"{folder_name}/{table_reference}"
+        logger.info("-------")
+        logger.info(f"folder_name - {folder_name}")
+        logger.info(f"table_reference - {table_reference}")
+        logger.info(f"Попытка прочитать файл из MinIO: {table_key}")  # Логируем ключ
+        response = s3_client.get_object(Bucket=MINIO_BUCKET_NAME, Key=table_key)
+        buffer = BytesIO(response["Body"].read())
+        workbook = load_workbook(buffer)
+        sheet = workbook.active
 
-        # Преобразуем содержимое таблицы в строковый формат
-        table_content = ""
-        for row in sheet.iter_rows(values_only=True):
-            row_content = "\t".join(map(str, row))  # Преобразуем каждую строку
-            table_content += row_content + "\n"
-
-        return table_content.strip()
-    except NoCredentialsError as e:
-        logger.error(f"Ошибка аутентификации в MinIO: {e}")
-        return None
+        table_content = "\n".join(
+            ["\t".join(map(str, row)) for row in sheet.iter_rows(values_only=True)]
+        )
+        return table_content
     except Exception as e:
-        logger.error(f"Не удалось прочитать таблицу из MinIO: {e}")
+        logger.error(f"Ошибка при чтении таблицы из MinIO: {e}")
         return None
 
 
 # Метод для обработки команды /start
-async def start(update: Update, context):
-    await update.message.reply_text(firts_message_from_tg_bot)
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("Справочник", callback_data="default")],
+        [InlineKeyboardButton("Поиск мануалов", callback_data="manuals_engrs")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        firts_message_from_tg_bot, reply_markup=reply_markup
+    )
+
+
+async def metod(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("Справочник", callback_data="default")],
+        [InlineKeyboardButton("Поиск мануалов", callback_data="manuals_engrs")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        "Выберите метод работы Бота:", reply_markup=reply_markup
+    )
 
 
 # Метод подсчитывает токены для конкретного отрывка текста
@@ -209,7 +311,7 @@ user_image_context = {}
 
 # Метод приоритизации поиска релевантных данных
 def filter_and_prioritize_context(
-    most_similar_texts, most_similar_refs, most_similar_related_tables
+    most_similar_texts, most_similar_refs, most_similar_related_tables, context
 ):
     texts_and_tables = []
     images = []
@@ -224,7 +326,7 @@ def filter_and_prioritize_context(
         if ref.endswith(".xlsx"):
             if ref not in added_tables:
                 table_content = read_table_from_minio(
-                    f"{MINIO_FOLDER_DOCS_NAME}/{ref}"
+                    f"{ref}", context
                 )  # сюда ничего не пиши
                 if table_content:
                     # texts_and_tables.append(
@@ -240,9 +342,7 @@ def filter_and_prioritize_context(
         elif related_table:
             # Проверяем, есть ли связь с таблицей
             if related_table not in added_tables:
-                table_content = read_table_from_minio(
-                    f"{MINIO_FOLDER_DOCS_NAME}/{related_table}"
-                )
+                table_content = read_table_from_minio(f"{related_table}", context)
                 if table_content:
                     table_name = next(
                         (
@@ -282,7 +382,7 @@ def filter_and_prioritize_context(
 
 def search_by_reference_in_milvus(reference_value):
     """Ищет объекты в Milvus, у которых reference совпадает с указанным значением."""
-    collection = Collection(name=MILVUS_COLLECTION)
+    collection = Collection(name=milvus_collection_name)
     try:
         # Выполняем запрос к Milvus
         result = collection.query(
@@ -301,6 +401,7 @@ def search_by_reference_in_milvus(reference_value):
 async def handle_message(update: Update, context):
     user_id = update.message.from_user.id
     user_message = update.message.text
+    user_data = context.user_data
     user_tag = update.message.from_user.username or update.message.from_user.full_name
     logger.info(f"Получено сообщение от {user_tag}: {user_message}")
 
@@ -326,7 +427,10 @@ async def handle_message(update: Update, context):
         # Фильтруем и приоритизируем контекст
         prioritized_texts_and_tables, prioritized_images, additional_contexts = (
             filter_and_prioritize_context(
-                most_similar_texts, most_similar_refs, most_similar_related_tables
+                most_similar_texts,
+                most_similar_refs,
+                most_similar_related_tables,
+                context,
             )
         )
 
@@ -360,9 +464,7 @@ async def handle_message(update: Update, context):
             if ref.endswith(".xlsx"):  # Если это таблица
                 if ref not in unique_table_references:
                     unique_table_references.add(ref)
-                    table_content = read_table_from_minio(
-                        f"{MINIO_FOLDER_DOCS_NAME}/{ref}"
-                    )
+                    table_content = read_table_from_minio(f"{ref}", context)
                     if table_content:
                         table_name = most_similar_texts[i]
                         table_contexts.append(
@@ -493,7 +595,7 @@ async def handle_message(update: Update, context):
 
 # Метод поиска упомянутых изображений по формату "Рисунок Х"
 def search_by_figure_id(figure_id):
-    collection = Collection(name=MILVUS_COLLECTION)
+    collection = Collection(name=milvus_collection_name)
     try:
         result = collection.query(
             expr=f'figure_id == "{figure_id.strip()}"',  # Удаляем лишние пробелы
@@ -512,7 +614,7 @@ def format_image_links(bot_reply, images_to_mention):
     for image_text, ref in images_to_mention:
         # Создаем URL для изображения
         image_url = (
-            f"{MINIO_ENDPOINT}/{MINIO_BUCKET_NAME}/{MINIO_FOLDER_DOCS_NAME}/{ref}"
+            f"{MINIO_ENDPOINT}/{MINIO_BUCKET_NAME}/{minio_folder_docs_name}/{ref}"
         )
         # logger.info(f"найденные все картинки - {image_text} {ref}")
         # Формируем кликабельную ссылку в формате HTML
@@ -548,7 +650,7 @@ async def send_table_to_chat(update, tables_to_mention, formatted_reply):
         logger.info(f"Обработка таблицы: {table_text} с системным именем {ref}")
         try:
             # Проверяем существование таблицы в MinIO
-            table_key = f"{MINIO_FOLDER_DOCS_NAME}/{ref}"
+            table_key = f"{minio_folder_docs_name}/{ref}"
             response = s3_client.get_object(Bucket=MINIO_BUCKET_NAME, Key=table_key)
             file_data = response["Body"].read()
 
@@ -617,7 +719,7 @@ def find_table_mentions(text):
 
 
 def find_image_reference_in_milvus(figure_id):
-    collection = Collection(name=MILVUS_COLLECTION)
+    collection = Collection(name=milvus_collection_name)
     try:
         result = collection.query(
             expr=f'figure_id == "{figure_id}"', output_fields=["reference"]
@@ -630,7 +732,7 @@ def find_image_reference_in_milvus(figure_id):
 
 
 def find_table_reference_in_milvus(figure_id):
-    collection = Collection(name=MILVUS_COLLECTION)
+    collection = Collection(name=milvus_collection_name)
     try:
         result = collection.query(
             expr=f'figure_id == "{figure_id}"', output_fields=["reference"]
@@ -720,10 +822,73 @@ def clear_message_bot():
         print(f"Ошибка API Telegram: {response.status_code}, {response.text}")
 
 
+# Функция для подключения к нужной базе данных Milvus
+def connect_to_milvus(db_name):
+    connections.connect(
+        alias="default", host=MILVUS_HOST, port=MILVUS_PORT, db_name=db_name
+    )
+    print(f"Подключено к базе данных Milvus: {db_name}")
+
+
+# Обработка выбора базы данных через callback кнопки в ТГ Боте
+async def select_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    context.user_data["minio_folder_docs_name"] = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK
+    await query.answer()  # Подтверждаем получение запроса
+
+    # global minio_folder_docs_name  # Объявляем переменную глобальнойы
+    global milvus_collection_name  # Объявляем переменную глобальной
+
+    selected_db = query.data  # Получаем callback_data из нажатой кнопки
+    context.user_data["selected_db"] = selected_db  # Сохраняем выбор пользователя
+    # connect_to_milvus(selected_db)  # Подключаемся к выбранной базе данных
+    connections.disconnect(alias="default")  # Отключаемся от нынешней бд в Milvus
+
+    # Отправляем сообщение пользователю
+    if selected_db == "default":
+        await query.edit_message_text(f"Вы выбрали режим справочника: {selected_db}")
+        minio_folder_docs_name = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK  # Изменение папки для поиска таблиц\рисунков
+        logger.info(minio_folder_docs_name)
+        milvus_collection_name = (
+            MIVLUS_COLLECTION_SPRAVOCHNIK  # Изменение коллекции milvus
+        )
+        logger.info(milvus_collection_name)
+        context.user_data["minio_folder_docs_name"] = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK
+        context.user_data["milvus_collection_name"] = MIVLUS_COLLECTION_SPRAVOCHNIK
+        # Подключаемся к Milvus с справочником
+        connections.connect(
+            alias="default",
+            host=MILVUS_HOST,
+            port=MILVUS_PORT,
+            db_name=MILVUS_DB_NAME_FIRST,
+        )
+    else:
+        await query.edit_message_text(
+            f"Вы выбрали режим поиска мануалов: {selected_db}"
+        )
+        minio_folder_docs_name = (
+            MINIO_FOLDER_DOCS_NAME_MANUAL  # Изменение папки для поиска таблиц\рисунков
+        )
+        logger.info(minio_folder_docs_name)
+        milvus_collection_name = MILVUS_COLLECTION  # Изменение коллекции milvus
+        logger.info(milvus_collection_name)
+        context.user_data["minio_folder_docs_name"] = MINIO_FOLDER_DOCS_NAME_MANUAL
+        context.user_data["milvus_collection_name"] = MILVUS_COLLECTION
+        connections.connect(
+            alias="default",
+            host=MILVUS_HOST,
+            port=MILVUS_PORT,
+            db_name=MILVUS_DB_NAME_SECOND,
+        )
+    load_collections_data()
+
+
 # Основная функция для запуска бота
 def main():
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("start", start))  # Обработка команды /start
+    application.add_handler(CommandHandler("metod", metod))  # Обработка команды /metod
+    application.add_handler(CallbackQueryHandler(select_db))  # Обработка кнопок
     application.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.Regex("^(Хорошо|Удовлетворительно|Плохо)$"),
