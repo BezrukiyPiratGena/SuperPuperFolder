@@ -174,12 +174,11 @@ async def load_collections_data(context):
     user_data["all_embeddings"] = []
     user_data["all_table_references"] = []
     user_data["all_related_tables"] = []
+    user_data["all_related_collections"] = []
 
     # Получаем список коллекций
     collections = utility.list_collections()
     user_data["all_collections"] = collections
-
-    logger.info("Начата асинхронная загрузка данных из всех коллекций...")
 
     for collection_name in collections:
         try:
@@ -236,6 +235,36 @@ def find_most_similar(context, query_embedding, top_n=20):
     )
 
 
+def find_most_similar_with_collections(context, query_embedding, top_n=2):
+    """
+    Находит наиболее релевантные вектора и возвращает:
+    - Тексты,
+    - Коллекции, из которых взяты вектора,
+    - Описание коллекций.
+    """
+    user_data = context.user_data
+    query_embedding_np = np.array([query_embedding], dtype=np.float32)
+    embeddings = np.array(user_data.get("all_embeddings", []))
+
+    if len(embeddings) == 0:
+        return [], set()  # Пустой список текстов и коллекций
+
+    # Рассчитываем сходство
+    similarities = np.dot(embeddings, query_embedding_np.T)
+    most_similar_indices = np.argsort(similarities, axis=0)[::-1][:top_n]
+
+    related_collections = set(user_data["all_collections"])
+    # Логирование найденных элементов
+    logger.info("Найденные релевантные элементы:")
+    for idx in most_similar_indices.flatten():
+        logger.info(
+            f"Текст: {user_data['all_texts'][idx]}, "
+            f"Сходство: {similarities[idx][0]}"
+        )
+
+    return related_collections
+
+
 # Чтение содержимого таблицы из MinIO (S3 хранилища)
 def read_table_from_minio(table_reference, context):
     """Читает таблицу из MinIO и возвращает её содержимое в виде текста."""
@@ -286,6 +315,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+# Метод для обработки команды /metod
 async def metod(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("Справочник", callback_data="default")],
@@ -407,6 +437,18 @@ def search_by_reference_in_milvus(reference_value):
 
 # Самый главный метод, обработки, получения, отправления сообщений
 async def handle_message(update: Update, context):
+
+    # Динамический вызов нужного метода обработки
+    handle_message_method = context.user_data.get(
+        "handle_message_method",  # Если метод сохранён, используем его
+        handle_message,  # По умолчанию - текущий метод
+    )
+
+    # Если метод другой (например, handle_message_manuals), вызываем его
+    if handle_message_method != handle_message:
+        await handle_message_method(update, context)
+        return
+
     user_id = update.message.from_user.id
     user_message = update.message.text
     user_data = context.user_data
@@ -599,6 +641,54 @@ async def handle_message(update: Update, context):
         await update.message.reply_text(
             f"Произошла ошибка при получении ответа: {str(e)}"
         )
+
+
+# Метод для обработки сообщений в режиме мануалов
+async def handle_message_manuals(update: Update, context):
+    user_message = update.message.text
+    user_tag = update.message.from_user.username or update.message.from_user.full_name
+
+    try:
+        query_embedding = create_embedding_for_query(user_message)
+
+        # Получаем релевантные тексты и коллекции
+        related_collections = find_most_similar_with_collections(
+            context, query_embedding
+        )
+
+        # Собираем описания коллекций
+        context_descriptions = []
+        for collection_name in related_collections:
+            description = get_collection_description(collection_name)
+            if description:
+                context_descriptions.append(
+                    f"Описание коллекции '{collection_name}': {description}"
+                )
+
+        # Сохраняем описания в переменную
+        context.user_data["context_descriptions"] = "\n".join(context_descriptions)
+
+        # Логируем для проверки
+        logger.info(
+            f"Контекст описаний коллекций:\n{context.user_data['context_descriptions']}"
+        )
+
+        # Проверяем, есть ли собранные описания коллекций
+        if context_descriptions:
+            # Формируем текст из описаний коллекций
+            descriptions_text = "\n\n".join(context_descriptions)
+            await update.message.reply_text(
+                f"Найденные описания коллекций с релевантными данными:\n\n{descriptions_text}"
+            )
+        else:
+            # Если описаний нет, отправляем сообщение
+            await update.message.reply_text(
+                "Релевантные описания коллекций не найдены."
+            )
+
+    except Exception as e:
+        logger.error(f"Ошибка обработки сообщения в режиме мануалов: {e}")
+        await update.message.reply_text("Произошла ошибка при обработке запроса.")
 
 
 # Метод поиска упомянутых изображений по формату "Рисунок Х"
@@ -863,6 +953,7 @@ async def select_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(milvus_collection_name)
         context.user_data["minio_folder_docs_name"] = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK
         context.user_data["milvus_collection_name"] = MIVLUS_COLLECTION_SPRAVOCHNIK
+        context.user_data["handle_message_method"] = handle_message
         # Подключаемся к Milvus с справочником
         connections.connect(
             alias="default",
@@ -882,6 +973,7 @@ async def select_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(milvus_collection_name)
         context.user_data["minio_folder_docs_name"] = MINIO_FOLDER_DOCS_NAME_MANUAL
         context.user_data["milvus_collection_name"] = MILVUS_COLLECTION
+        context.user_data["handle_message_method"] = handle_message_manuals
         connections.connect(
             alias="default",
             host=MILVUS_HOST,
@@ -889,6 +981,19 @@ async def select_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
             db_name=MILVUS_DB_NAME_SECOND,
         )
     await load_collections_data(context)
+    # Загружаем коллекции при втором режиме работы
+
+
+# Метод для получения описания (description) коллекции Milvus
+def get_collection_description(collection_name):
+    try:
+        collection = Collection(name=collection_name)
+        return collection.description  # Возвращаем описание коллекции
+    except Exception as e:
+        logger.error(
+            f"Не удалось получить описание для коллекции '{collection_name}': {e}"
+        )
+        return None
 
 
 # Основная функция для запуска бота

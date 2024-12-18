@@ -49,17 +49,17 @@ MILVUS_HOST = os.getenv("MILVUS_HOST")  # IP Милвуса(БД)
 MILVUS_PORT = os.getenv("MILVUS_PORT")  # Порт Милвуса(БД)
 
 # Настройка важных переменных
-# change_db_of_milvus = MILVUS_DB_NAME_FIRST  # <================================= Выбери бд, в которую будет записываться инфа (Справочник)
-change_db_of_milvus = MILVUS_DB_NAME_SECOND  # <================================= Выбери бд, в которую будет записываться инфа (Мануалы)
+change_db_of_milvus = MILVUS_DB_NAME_FIRST  # <================================= Выбери бд, в которую будет записываться инфа (Справочник)
+# change_db_of_milvus = MILVUS_DB_NAME_SECOND  # <================================= Выбери бд, в которую будет записываться инфа (Мануалы)
 name_of_collection_milvus = MILVUS_COLLECTION
 
 # minio_folder_docs_name = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK  # <================================= Выбери папку, в которую будет записываться инфа (Справочник)
 minio_folder_docs_name = MINIO_FOLDER_DOCS_NAME_MANUAL  # <================================= Выбери папку, в которую будет записываться инфа (Справочник)
 
 name_of_bucket_minio = MINIO_BUCKET_NAME
-path_of_doc_for_convert = r"C:\Project1\GITProjects\myproject2\add_docs_to_milvus\Smurfs.docx"  # <============== Путь к файлу для добавления его в БД
+path_of_doc_for_convert = r"C:\Project1\GITProjects\myproject2\add_docs_to_milvus\Ents.docx"  # <============== Путь к файлу для добавления его в БД
 description_milvus_collection = (
-    "Мануал по Смурфикам"  # <============== Описание коллекции milvus
+    "Мануал по Энтам"  # <============== Описание коллекции milvus
 )
 openai.api_key = OPENAI_API_KEY
 
