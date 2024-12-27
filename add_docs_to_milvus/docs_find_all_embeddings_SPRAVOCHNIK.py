@@ -1,6 +1,6 @@
 from ast import Index
 from ctypes import alignment
-from openpyxl.styles import Alignment
+from openpyxl.styles import Border, Side, Alignment
 import re
 import time
 from venv import logger
@@ -57,7 +57,7 @@ minio_folder_docs_name = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK  # <================
 name_of_bucket_minio = MINIO_BUCKET_NAME
 path_of_doc_for_convert = r"C:\Project1\GITProjects\myproject2\add_docs_to_milvus\spravochnik.docx"  # <============== Путь к файлу для добавления его в БД
 description_milvus_collection = (
-    "Спавочник СИР"  # <============== Описание коллекции milvus
+    "Справочник СИР"  # <============== Описание коллекции milvus
 )
 openai.api_key = OPENAI_API_KEY
 
@@ -225,23 +225,42 @@ def split_table_text_logically(table_data):
 
 # Функция сохраняет таблицу в MiniO в формате XLSX
 def save_table_to_minio(bucket_name, table_name, table_data):
-    """Сохраняет таблицу в MinIO в формате XLSX"""
+    """Сохраняет таблицу в MinIO в формате XLSX с обводкой всех ячеек, выравниванием по центру и переносом текста."""
     workbook = Workbook()
     sheet = workbook.active
 
-    # Добавляем строки таблицы в Excel
-    for row_index, row_data in enumerate(table_data, start=1):
-        for col_index, cell_value in enumerate(row_data, start=1):
-            cell = sheet.cell(row=row_index, column=col_index, value=cell_value)
-            # Устанавливаем выравнивание по центру и перенос текста
+    # Устанавливаем стили для ячеек
+    thin_border = Border(
+        left=Side(style="thin"),
+        right=Side(style="thin"),
+        top=Side(style="thin"),
+        bottom=Side(style="thin"),
+    )
+
+    # Определяем максимальное количество строк и столбцов
+    max_rows = len(table_data)
+    max_cols = max(len(row) for row in table_data)
+
+    # Добавляем строки таблицы в Excel с применением стилей
+    for row_idx in range(1, max_rows + 1):
+        for col_idx in range(1, max_cols + 1):
+            # Получаем значение ячейки или оставляем пустую строку
+            cell_value = (
+                table_data[row_idx - 1][col_idx - 1]
+                if row_idx - 1 < len(table_data)
+                and col_idx - 1 < len(table_data[row_idx - 1])
+                else ""
+            )
+            cell = sheet.cell(row=row_idx, column=col_idx, value=cell_value)
+            cell.border = thin_border  # Устанавливаем обводку
             cell.alignment = Alignment(
                 horizontal="center", vertical="center", wrap_text=True
-            )
+            )  # Выравнивание и перенос текста
 
-    # Устанавливаем ширину столбцов
+    # Устанавливаем ширину всех столбцов (50 условных единиц)
     for col in sheet.columns:
-        col_letter = col[0].column_letter  # Получаем буквенное обозначение столбца
-        sheet.column_dimensions[col_letter].width = 50  # Устанавливаем ширину столбца
+        column_letter = col[0].column_letter  # Получаем букву столбца
+        sheet.column_dimensions[column_letter].width = 50
 
     # Сохраняем данные в буфер для XLSX
     buffer_xlsx = BytesIO()

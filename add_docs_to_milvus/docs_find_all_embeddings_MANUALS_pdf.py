@@ -21,6 +21,9 @@ from io import BytesIO
 from PIL import Image
 import tiktoken
 from openpyxl import Workbook
+import fitz  # PyMuPDF для работы с PDF-файлами
+from PIL import Image  # Для сохранения изображений
+
 
 # Загрузка переменных среды
 load_dotenv("all_tockens.env")
@@ -41,32 +44,26 @@ MINIO_FOLDER_DOCS_NAME_MANUAL = os.getenv(
 MILVUS_DB_NAME_FIRST = os.getenv(
     "MILVUS_DB_NAME_FIRST"
 )  # БД коллекций Милвуса(БД) с справочником
-
+MILVUS_DB_NAME_SECOND = os.getenv(
+    "MILVUS_DB_NAME_SECOND"
+)  # БД коллекций Милвуса(БД) с мануалами
 MILVUS_COLLECTION = os.getenv("MILVUS_COLLECTION")  # Коллекция Милвуса(БД)
 MILVUS_HOST = os.getenv("MILVUS_HOST")  # IP Милвуса(БД)
 MILVUS_PORT = os.getenv("MILVUS_PORT")  # Порт Милвуса(БД)
 
-DOCX_DIRECTORY = r"C:\Project1\GITProjects\Мануалы\Автопилот"  # <================= Путь к файлам docx
-
-docx_files = [file for file in os.listdir(DOCX_DIRECTORY) if file.endswith(".docx")]
-
 # Настройка важных переменных
 change_db_of_milvus = MILVUS_DB_NAME_FIRST  # <================================= Выбери бд, в которую будет записываться инфа (Справочник)
-if not docx_files:
-    raise ValueError("Нет файлов .docx в указанной директории.")
+# change_db_of_milvus = MILVUS_DB_NAME_SECOND  # <================================= Выбери бд, в которую будет записываться инфа (Мануалы)
+name_of_collection_milvus = MILVUS_COLLECTION
 
+# minio_folder_docs_name = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK  # <================================= Выбери папку, в которую будет записываться инфа (Справочник)
 minio_folder_docs_name = MINIO_FOLDER_DOCS_NAME_MANUAL  # <================================= Выбери папку, в которую будет записываться инфа (Справочник)
 
 name_of_bucket_minio = MINIO_BUCKET_NAME
-
-milvus_collection_base = "Docs"  # <============== Название коллекции в Milvus
-
-
-# name_documents = "Simrad Autopilot System AP70, AP80 Installation Manual"  # <============== Описание коллекции milvus
-
-# path_of_doc_for_convert = r"C:\Project1\GITProjects\myproject2\add_docs_to_milvus\Simrad Autopilot System AP70, AP80 Installation Manual.docx"  # <============== Путь к файлу для добавления его в БД
-# description_milvus_collection = name_documents + ".pdf"
-
+path_of_pdf_for_convert = r"C:\Project1\GITProjects\myproject2\add_docs_to_milvus\Ents.docx"  # <============== Путь к файлу для добавления его в БД
+description_milvus_collection = (
+    "Мануал по Энтам"  # <============== Описание коллекции milvus
+)
 
 openai.api_key = OPENAI_API_KEY
 
@@ -95,68 +92,23 @@ if s3_client.list_buckets().get("Buckets", None):
         s3_client.create_bucket(Bucket=name_of_bucket_minio)"""
 
 # Создание коллекции Milvus (если её нет)
+collection_name = name_of_collection_milvus
+if not utility.has_collection(collection_name):
+    fields = [
+        FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
+        FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=1536),
+        FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
+        FieldSchema(name="reference", dtype=DataType.VARCHAR, max_length=65535),
+        FieldSchema(name="figure_id", dtype=DataType.VARCHAR, max_length=100),
+        FieldSchema(name="related_table", dtype=DataType.VARCHAR, max_length=65535),
+    ]
+    schema = CollectionSchema(fields, description=description_milvus_collection)
+    collection = Collection(name=collection_name, schema=schema)
+else:
+    collection = Collection(name=collection_name)
 
-
-# Функция обрабатывает данные из Word, создает эмбеддинги и сохраняет все в Milvus
-def process_content_from_word(word_path, bucket_name):
-    """Обрабатывает текст, таблицы и изображения из Word файла и сохраняет в Milvus."""
-    successful_embeddings_count = 0
-    text_blocks_with_refs, full_text = extract_content_from_word(word_path, bucket_name)
-    text_blocks = split_text_logically(full_text)
-
-    # **Добавление имени коллекции в Milvus как первый элемент**
-    collection_name_block = description_milvus_collection  # Имя коллекции
-    collection_name_embedding = create_embeddings(collection_name_block)
-    if collection_name_embedding:
-        collection_name_embedding_np = np.array(
-            collection_name_embedding, dtype=np.float32
-        ).tolist()
-        data = [
-            [collection_name_embedding_np],
-            [collection_name_block],
-            [""],
-            [""],
-            [""],
-        ]
-        collection.insert(data)
-        print(f"Имя коллекции '{collection_name_block}' успешно добавлено.")
-        successful_embeddings_count += 1
-
-    for block in text_blocks:
-        if block and block.strip():  # Проверка, чтобы блок текста не был пустым
-            embedding = create_embeddings(block)
-            if embedding is None:
-                continue
-            embedding_np = np.array(embedding, dtype=np.float32).tolist()
-            data = [[embedding_np], [block], [""], [""], [""]]
-            collection.insert(data)
-            successful_embeddings_count += 1
-            print(
-                f"Эмбеддинг и текст успешно добавлены для блока {successful_embeddings_count}."
-            )
-        else:
-            print("Пустой текст, пропуск эмбеддинга")
-
-    for ref_info in text_blocks_with_refs:
-        text = ref_info["text"]
-        reference = ref_info["reference"]
-        figure_id = ref_info["figure_id"]
-        related_table = ref_info["related_table"]
-        if text and text.strip():  # Проверка, чтобы текст описания не был пустым
-            embedding = create_embeddings(text)
-            if embedding is None:
-                continue
-            embedding_np = np.array(embedding, dtype=np.float32).tolist()
-            data = [[embedding_np], [text], [reference], [figure_id], [related_table]]
-            collection.insert(data)
-            successful_embeddings_count += 1
-            print(f"Эмбеддинг и пояснение успешно добавлены для объекта: {reference}")
-        else:
-            print("Пустое описание, пропуск эмбеддинга для объекта:", reference)
-
-    collection.flush()
-    print("Все эмбеддинги и данные успешно добавлены в Milvus.")
-    print(f"Количество успешно созданных эмбеддингов: {successful_embeddings_count}")
+# Загрузка модели spaCy
+nlp = spacy.load("ru_core_news_lg")
 
 
 # Функция создает эмбеддинги ко всему тексту (описание рисунков, текста таблиц, любого текста)
@@ -170,7 +122,7 @@ def create_embeddings(text, pause_duration=0.5):
         response = openai.embeddings.create(
             input=[text], model="text-embedding-ada-002"
         )
-        # time.sleep(pause_duration) # <================================== Тайм Слип для обхода ограничений на кол-во запросов
+        time.sleep(pause_duration)
         return response.data[0].embedding
     except Exception as e:
         print(f"Ошибка при создании эмбеддинга: {e}")
@@ -200,31 +152,19 @@ num_tokens = count_tokens(text)
 print(f"Количество токенов: {num_tokens}")
 
 
+# Функция создает лог блоки из текста вне таблиц
 def split_text_logically(text):
-    """
-    Разделяет текст на логические блоки по 500 символов, соблюдая границы абзацев.
-    """
-    paragraphs = text.split("\n")  # Разделяем текст на абзацы
-    logical_blocks = []  # Список для хранения логических блоков
-    current_block = ""  # Текущий блок текста
-
-    for paragraph in paragraphs:
-        paragraph = paragraph.strip()  # Убираем лишние пробелы
-        if not paragraph:
-            continue  # Пропускаем пустые абзацы
-
-        # Если добавление текущего абзаца не превышает 500 символов, добавляем его
-        if len(current_block) + len(paragraph) + 1 <= 500:  # +1 для пробела/разделителя
-            current_block += paragraph + " "
-        else:
-            # Если текущий блок превышает 500 символов, сохраняем его и начинаем новый
-            logical_blocks.append(current_block.strip())
-            current_block = paragraph + " "
-
-    # Добавляем последний блок, если он не пустой
-    if current_block.strip():
-        logical_blocks.append(current_block.strip())
-
+    """Разделяет текст на логические блоки."""
+    doc = nlp(text)
+    logical_blocks = []
+    current_block = []
+    for sent in doc.sents:
+        current_block.append(sent.text)
+        if len(" ".join(current_block)) > 500:
+            logical_blocks.append(" ".join(current_block))
+            current_block = []
+    if current_block:
+        logical_blocks.append(" ".join(current_block))
     return logical_blocks
 
 
@@ -349,9 +289,9 @@ def extract_table_id(text):
 
 
 # Функция обрабатывает Word документ, извлекая таблицы, текст, изображения из документа и сохраняя в MiniO
-def extract_content_from_word(word_path, bucket_name):
+def extract_content_from_word(pdf_path, bucket_name):
     """Извлекает текст, таблицы и изображения из Word файла, избегая дубликатов."""
-    doc = Document(word_path)
+    doc = fitz.open(pdf_path)  # Открывает PDF-файл
     text_blocks_with_refs = []
     current_text_block = []
     current_table_data = []
@@ -508,57 +448,59 @@ def extract_content_from_word(word_path, bucket_name):
     return text_blocks_with_refs, " ".join(current_text_block)
 
 
-count_collection = 11
-# Перебор всех файлов .docx
-for docx_file in docx_files:
-    # Сохраняем имя файла без расширения
-    name_documents = os.path.splitext(docx_file)[0]
+# Функция обрабатывает данные из Word, создает эмбеддинги и сохраняет все в Milvus
+def process_content_from_word(pdf_path, bucket_name):
+    """Обрабатывает текст, таблицы и изображения из Word файла и сохраняет в Milvus."""
+    successful_embeddings_count = 0
+    text_blocks_with_refs, full_text = extract_content_from_word(pdf_path, bucket_name)
+    text_blocks = split_text_logically(full_text)
 
-    # Генерируем полный путь к файлу
-    path_of_doc_for_convert = os.path.join(DOCX_DIRECTORY, docx_file)
+    for block in text_blocks:
+        if block and block.strip():  # Проверка, чтобы блок текста не был пустым
+            embedding = create_embeddings(block)
+            if embedding is None:
+                continue
+            embedding_np = np.array(embedding, dtype=np.float32).tolist()
+            data = [[embedding_np], [block], [""], [""], [""]]
+            collection.insert(data)
+            successful_embeddings_count += 1
+            print(
+                f"Эмбеддинг и текст успешно добавлены для блока {successful_embeddings_count}."
+            )
+        else:
+            print("Пустой текст, пропуск эмбеддинга")
 
-    # Описание коллекции
-    description_milvus_collection = name_documents + ".pdf"
+    for ref_info in text_blocks_with_refs:
+        text = ref_info["text"]
+        reference = ref_info["reference"]
+        figure_id = ref_info["figure_id"]
+        related_table = ref_info["related_table"]
+        if text and text.strip():  # Проверка, чтобы текст описания не был пустым
+            embedding = create_embeddings(text)
+            if embedding is None:
+                continue
+            embedding_np = np.array(embedding, dtype=np.float32).tolist()
+            data = [[embedding_np], [text], [reference], [figure_id], [related_table]]
+            collection.insert(data)
+            successful_embeddings_count += 1
+            print(f"Эмбеддинг и пояснение успешно добавлены для объекта: {reference}")
+        else:
+            print("Пустое описание, пропуск эмбеддинга для объекта:", reference)
 
-    # Название коллекции
-    milvus_collection = f"{milvus_collection_base}{count_collection}"
-
-    collection_name = milvus_collection
-    if not utility.has_collection(collection_name):
-        fields = [
-            FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
-            FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=1536),
-            FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
-            FieldSchema(name="reference", dtype=DataType.VARCHAR, max_length=65535),
-            FieldSchema(name="figure_id", dtype=DataType.VARCHAR, max_length=100),
-            FieldSchema(name="related_table", dtype=DataType.VARCHAR, max_length=65535),
-        ]
-        schema = CollectionSchema(fields, description=description_milvus_collection)
-        collection = Collection(name=collection_name, schema=schema)
-    else:
-        collection = Collection(name=collection_name)
-
-    # Загрузка модели spaCy
-    nlp = spacy.load("ru_core_news_lg")
-
-    # Пример использования
-    word_path = path_of_doc_for_convert
-    process_content_from_word(word_path, name_of_bucket_minio)
-
-    # Создание и загрузка индекса в Milvus
-    index_params = {
-        "index_type": "IVF_FLAT",
-        "metric_type": "L2",
-        "params": {"nlist": 128},
-    }
-    collection.create_index(field_name="embedding", index_params=index_params)
-    collection.load()
-
-    print(
-        f"Индекс успешно создан и коллекция '{collection_name}' загружена в БД '{change_db_of_milvus}'."
-    )
-
-    count_collection += 1
+    collection.flush()
+    print("Все эмбеддинги и данные успешно добавлены в Milvus.")
+    print(f"Количество успешно созданных эмбеддингов: {successful_embeddings_count}")
 
 
-print(f"Все коллекции загружены.")
+# Пример использования
+pdf_path = path_of_pdf_for_convert
+process_content_from_word(pdf_path, name_of_bucket_minio)
+
+# Создание и загрузка индекса в Milvus
+index_params = {"index_type": "IVF_FLAT", "metric_type": "L2", "params": {"nlist": 128}}
+collection.create_index(field_name="embedding", index_params=index_params)
+collection.load()
+
+print(
+    f"Индекс успешно создан и коллекция '{collection_name}' загружена в БД '{change_db_of_milvus}'."
+)
