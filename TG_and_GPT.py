@@ -4,7 +4,7 @@ import os
 import numpy as np
 import gspread  # Библиотека для работы с Google Sheets
 from google.oauth2.service_account import Credentials
-from telegram import InlineKeyboardMarkup, Update, ReplyKeyboardMarkup
+from telegram import InlineKeyboardMarkup, Update, ReplyKeyboardMarkup, BotCommand
 from telegram._inline.inlinekeyboardbutton import InlineKeyboardButton
 from telegram.ext import (
     ApplicationBuilder,
@@ -24,7 +24,6 @@ import asyncio
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 import requests
-
 from openpyxl import load_workbook  # работа с xlsx
 from io import StringIO
 from io import BytesIO
@@ -88,7 +87,7 @@ google_credentials = {  # Тут все ключи для работы API от 
 }
 
 URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
-firts_message_from_tg_bot = "Привет! Я асистент для инженеров, можешь задать мне вопрос"
+firts_message_from_tg_bot = "Привет!🖐 Я асистент для инженеров, перед тем как задать мне вопрос, выбери режим работы через команду '/metod'"
 
 minio_folder_docs_name = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK
 milvus_collection_name = MILVUS_COLLECTION
@@ -347,16 +346,32 @@ async def start(update: Update, context):
     await update.message.reply_text(firts_message_from_tg_bot)
 
 
+# Метод для обработки команды /info
+async def info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Обработка команды /info.
+    Отправляет информацию о боте.
+    """
+    info_message = (
+        "Я Ассистент для инженеров.\n"
+        "Чему я уже научился🧐:\n"
+        "1️⃣ Искать информации по Справочнику Инженеров.\n"
+        "2️⃣ Отправлять таблицы или рисунки из Справочника Инжнеров.\n"
+        "Если ты готов, то выбери режим работы через команду ➡️/metod⬅️!"
+    )
+    await update.message.reply_text(info_message)
+
+
 # Метод для обработки команды /metod
 async def metod(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
-        [InlineKeyboardButton("Справочник", callback_data="engs_bot")],
-        [InlineKeyboardButton("Поиск мануалов", callback_data="manuals_engrs")],
+        [InlineKeyboardButton("Поиск по справочнику", callback_data="engs_bot")],
+        # [InlineKeyboardButton("Поиск мануалов", callback_data="manuals_engrs")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
-        "Выберите метод работы Бота:", reply_markup=reply_markup
+        "Вы выбрали метод работы Бота:", reply_markup=reply_markup
     )
 
 
@@ -1076,11 +1091,57 @@ def get_collection_description(collection_name):
         return None
 
 
+async def set_bot_commands(application):
+    """
+    Устанавливает меню команд для Telegram-бота.
+    """
+    commands = [
+        BotCommand("start", "Запустить бота"),
+        # BotCommand("help", "Получить помощь"),
+        BotCommand("metod", "Выбрать режим работы бота"),
+        BotCommand("info", "Информация о боте"),
+    ]
+    await application.bot.set_my_commands(commands)
+
+
+# Метод обработки ошибки асинхронной менюшки /comands
+def run_async_task(task):
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:  # Если цикла нет, создаем его
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop.run_until_complete(task)
+
+
+# метод для обработки нажатой кнопки при выбор режима работы Бота
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()  # Подтверждаем получение нажатия
+
+    # Проверяем, какую кнопку нажали
+    if query.data == "engs_bot":
+        await query.edit_message_text(
+            "Вы выбрали режим : Поиск по справочнику📔 \n\nМожете задать вопрос"
+        )
+    elif query.data == "manuals_engrs":
+        await query.edit_message_text(
+            "Вы выбрали режим: Поиск мануалов📚 \n\nМожете задать вопрос"
+        )
+
+
 # Основная функция для запуска бота
 def main():
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+    # Установка команд для меню
+    run_async_task(set_bot_commands(application))
+
     application.add_handler(CommandHandler("start", start))  # Обработка команды /start
-    # application.add_handler(CommandHandler("metod", metod))  # Обработка команды /metod
+    application.add_handler(CommandHandler("info", info))  # Обработка команды /info
+    application.add_handler(CommandHandler("metod", metod))  # Обработка команды /metod
+    application.add_handler(
+        CallbackQueryHandler(handle_callback)
+    )  # оббработка нажатия кнопок по выбору режма работы Бота
     # application.add_handler(CallbackQueryHandler(select_db))  # Обработка кнопок
     application.add_handler(
         MessageHandler(
