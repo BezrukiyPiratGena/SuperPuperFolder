@@ -511,7 +511,9 @@ def process_content_from_word(word_path, bucket_name):
             data = [[embedding_np], [text], [reference], [figure_id], [related_table]]
             collection.insert(data)
             successful_embeddings_count += 1
-            print(f"Эмбеддинг и пояснение успешно добавлены для объекта: {reference}")
+            print(
+                f"Эмбеддинг и пояснение успешно добавлены для объекта: Референс - '{reference}', Родительский файл - '{related_table}'"
+            )
         else:
             print("Пустое описание, пропуск эмбеддинга для объекта:", reference)
 

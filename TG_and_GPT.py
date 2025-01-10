@@ -97,6 +97,11 @@ milvus_collection_name = MILVUS_COLLECTION
 # Устанавливаем ключ OpenAI API
 openai.api_key = OPENAI_API_KEY
 
+# Настройка логирования
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+
 logger = logging.getLogger(__name__)
 
 # Настройка Google Sheets API
@@ -114,14 +119,9 @@ s3_client = boto3.client(
     aws_secret_access_key=MINIO_SECRET_KEY,
     region_name=MINIO_REGION_NAME,
 )
-logger.info("Подключение к MiniO завернено")
+logger.info("Подключение к MiniO завершено")
 # print(f'Логин "{MINIO_ACCESS_KEY}" для БД MiniO')  # Проверка LOG
 # print(f'Пароль "{MINIO_SECRET_KEY}" для БД MiniO')  # Проверка PSWD
-
-# Настройка логирования
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
 
 
 logger.info("Подключение к коллекциям Milvus начато")
@@ -641,6 +641,7 @@ async def handle_message(update: Update, context):
                 {"role": "user", "content": user_message},
             ],
             temperature=0.3,
+            timeout=10,
         )
         # logger.info(f"response ответа {response}")
 
@@ -695,9 +696,9 @@ async def handle_message(update: Update, context):
         await asyncio.sleep(1)
     except Exception as e:
         logger.error(f"Произошла ошибка: {e}")
-        # await update.message.reply_text(
-        #    f"Произошла ошибка при получении ответа: {str(e)}"
-        # )
+        await update.message.reply_text(
+            f"Произошла ошибка при получении ответа: {str(e)}"
+        )
 
         await update.message.reply_text(
             f"Произошла ошибка при получении ответа: {str(e)}"
