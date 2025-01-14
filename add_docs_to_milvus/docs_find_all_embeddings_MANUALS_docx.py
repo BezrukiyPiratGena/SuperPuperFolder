@@ -1,3 +1,5 @@
+import logging
+import asyncio
 from ast import Index
 import re
 import time
@@ -46,7 +48,24 @@ MILVUS_COLLECTION = os.getenv("MILVUS_COLLECTION")  # Коллекция Мил�
 MILVUS_HOST = os.getenv("MILVUS_HOST")  # IP Милвуса(БД)
 MILVUS_PORT = os.getenv("MILVUS_PORT")  # Порт Милвуса(БД)
 
-DOCX_DIRECTORY = r"C:\Project1\GITProjects\Мануалы\Автопилот"  # <================= Путь к файлам docx
+# Настройка логирования
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+
+# =================================================
+
+DOCX_DIRECTORY = (
+    r"C:\Project1\GITProjects\Мануалы\ЕРМАК"  # <================= Путь к файлам docx
+)
+
+# Количество коллекций + 8
+count_collection_starts = 226  # <===================== Номер коллекцииы
+count_collection_ends = count_collection_starts
+
+end_name_docs = ".pdf"  # <============ Конец имени исходного файла, названия коллекции
+
+# =================================================
 
 docx_files = [file for file in os.listdir(DOCX_DIRECTORY) if file.endswith(".docx")]
 
@@ -119,8 +138,10 @@ def process_content_from_word(word_path, bucket_name):
             [""],
         ]
         collection.insert(data)
-        print(f"Имя коллекции '{collection_name_block}' успешно добавлено.")
+
         successful_embeddings_count += 1
+
+        print(f"Имя коллекции '{collection_name_block}' успешно добавлено")
 
     for block in text_blocks:
         if block and block.strip():  # Проверка, чтобы блок текста не был пустым
@@ -131,7 +152,7 @@ def process_content_from_word(word_path, bucket_name):
             data = [[embedding_np], [block], [""], [""], [""]]
             collection.insert(data)
             successful_embeddings_count += 1
-            print(
+            logger.info(
                 f"Эмбеддинг и текст успешно добавлены для блока {successful_embeddings_count}."
             )
         else:
@@ -155,7 +176,7 @@ def process_content_from_word(word_path, bucket_name):
             print("Пустое описание, пропуск эмбеддинга для объекта:", reference)
 
     collection.flush()
-    print("Все эмбеддинги и данные успешно добавлены в Milvus.")
+    logger.info("Все эмбеддинги и данные успешно добавлены в Milvus.")
     print(f"Количество успешно созданных эмбеддингов: {successful_embeddings_count}")
 
 
@@ -284,31 +305,48 @@ def split_table_text_logically(table_data):
     return logical_blocks
 
 
-# Функция сохраняет таблицу в MiniO в формате XLSX
-def save_table_to_minio(bucket_name, table_name, table_data):
-    """Сохраняет таблицу в MinIO в формате XLSX"""
-    workbook = Workbook()
-    sheet = workbook.active
+# Функция сохраняет исходный файл в MiniO
+def save_table_to_minio(bucket_name, description_milvus_collection):
+    """
+    Сохраняет файл, соответствующий значению переменной description_milvus_collection, в MinIO.
 
-    # Добавляем строки таблицы в Excel
-    for row_data in table_data:
-        sheet.append(row_data)
+    Args:
+        bucket_name (str): Название бакета в MinIO.
+        description_milvus_collection (str): Имя файла для поиска и сохранения.
+    """
+    try:
+        # Генерируем полный путь к файлу
+        file_path = os.path.join(DOCX_DIRECTORY, description_milvus_collection)
 
-    # Сохраняем данные в буфер для XLSX
-    buffer_xlsx = BytesIO()
-    workbook.save(buffer_xlsx)
-    buffer_xlsx.seek(0)
+        # Проверяем, существует ли файл
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(
+                f"Файл {description_milvus_collection} не найден в {DOCX_DIRECTORY}."
+            )
 
-    # Сохраняем XLSX в MinIO
-    xlsx_key = f"{minio_folder_docs_name}/{table_name}.xlsx"
-    s3_client.put_object(
-        Bucket=bucket_name,
-        Key=xlsx_key,
-        Body=buffer_xlsx,
-        ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        ContentDisposition="inline",  # Указывает браузеру открывать файл, а не скачивать
-    )
-    print(f"Таблица сохранена в MinIO как {table_name}.xlsx")
+        # Открываем файл и читаем его содержимое
+        with open(file_path, "rb") as file:
+            file_data = file.read()
+
+        # Генерируем ключ для сохранения в MinIO
+        minio_key = f"{minio_folder_docs_name}/{description_milvus_collection}"
+
+        # Сохраняем файл в MinIO
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key=minio_key,
+            Body=file_data,
+            ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ContentDisposition="inline",  # Указывает браузеру открывать файл, а не скачивать
+        )
+
+        logger.info(
+            f"Файл {description_milvus_collection} успешно сохранён в MinIO под ключом {minio_key}."
+        )
+    except Exception as e:
+        logger.info(
+            f"Ошибка при сохранении файла {description_milvus_collection} в MinIO: {e}"
+        )
 
 
 # Функция сохраняет все рисунки из документа как JPEG
@@ -369,6 +407,7 @@ def extract_content_from_word(word_path, bucket_name):
                     table_name = f"table_{table_counter}"
                     table_name_xlsx = f"{table_name}.xlsx"
                     # save_table_to_minio(bucket_name, table_name, current_table_data)                            <=============== Тут сохраняли таблицы в MiniO
+
                     # Сохраняем описание таблицы
                     explanation = current_text_block[-1] if current_text_block else ""
 
@@ -508,7 +547,6 @@ def extract_content_from_word(word_path, bucket_name):
     return text_blocks_with_refs, " ".join(current_text_block)
 
 
-count_collection = 11
 # Перебор всех файлов .docx
 for docx_file in docx_files:
     # Сохраняем имя файла без расширения
@@ -518,10 +556,10 @@ for docx_file in docx_files:
     path_of_doc_for_convert = os.path.join(DOCX_DIRECTORY, docx_file)
 
     # Описание коллекции
-    description_milvus_collection = name_documents + ".pdf"
+    description_milvus_collection = name_documents + end_name_docs
 
     # Название коллекции
-    milvus_collection = f"{milvus_collection_base}{count_collection}"
+    milvus_collection = f"{milvus_collection_base}{count_collection_ends}"
 
     collection_name = milvus_collection
     if not utility.has_collection(collection_name):
@@ -553,12 +591,18 @@ for docx_file in docx_files:
     }
     collection.create_index(field_name="embedding", index_params=index_params)
     collection.load()
+    save_table_to_minio(name_of_bucket_minio, description_milvus_collection)
 
+    count_collection_ends += 1
     print(
-        f"Индекс успешно создан и коллекция '{collection_name}' загружена в БД '{change_db_of_milvus}'."
+        "---------------------------------------------------------------------------------------------------"
     )
-
-    count_collection += 1
+    print(
+        f"Индекс успешно создан и коллекция '{collection_name}' загружена в БД '{change_db_of_milvus}' по счету {count_collection_ends - count_collection_starts}"
+    )
+    print(
+        "---------------------------------------------------------------------------------------------------"
+    )
 
 
 print(f"Все коллекции загружены.")

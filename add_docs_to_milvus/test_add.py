@@ -1,3 +1,4 @@
+import logging
 from ast import Index
 import re
 import time
@@ -21,9 +22,6 @@ from io import BytesIO
 from PIL import Image
 import tiktoken
 from openpyxl import Workbook
-import fitz  # PyMuPDF для работы с PDF-файлами
-from PIL import Image  # Для сохранения изображений
-
 
 # Загрузка переменных среды
 load_dotenv("all_tockens.env")
@@ -44,26 +42,49 @@ MINIO_FOLDER_DOCS_NAME_MANUAL = os.getenv(
 MILVUS_DB_NAME_FIRST = os.getenv(
     "MILVUS_DB_NAME_FIRST"
 )  # БД коллекций Милвуса(БД) с справочником
-MILVUS_DB_NAME_SECOND = os.getenv(
-    "MILVUS_DB_NAME_SECOND"
-)  # БД коллекций Милвуса(БД) с мануалами
+
 MILVUS_COLLECTION = os.getenv("MILVUS_COLLECTION")  # Коллекция Милвуса(БД)
 MILVUS_HOST = os.getenv("MILVUS_HOST")  # IP Милвуса(БД)
 MILVUS_PORT = os.getenv("MILVUS_PORT")  # Порт Милвуса(БД)
 
+# Настройка логирования
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+
+# =================================================
+
+DOCX_DIRECTORY = (
+    r"C:\Project1\GITProjects\Мануалы\ГРАНИТ"  # <================= Путь к файлам docx
+)
+
+# Количество коллекций + 8
+count_collection_starts = 185  # <===================== Номер коллекцииы
+count_collection_ends = count_collection_starts
+
+end_name_docs = ".pdf"  # <============ Конец имени исходного файла, названия коллекции
+
+# =================================================
+
+docx_files = [file for file in os.listdir(DOCX_DIRECTORY) if file.endswith(".docx")]
+
 # Настройка важных переменных
 change_db_of_milvus = MILVUS_DB_NAME_FIRST  # <================================= Выбери бд, в которую будет записываться инфа (Справочник)
-# change_db_of_milvus = MILVUS_DB_NAME_SECOND  # <================================= Выбери бд, в которую будет записываться инфа (Мануалы)
-name_of_collection_milvus = MILVUS_COLLECTION
+if not docx_files:
+    raise ValueError("Нет файлов .docx в указанной директории.")
 
-# minio_folder_docs_name = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK  # <================================= Выбери папку, в которую будет записываться инфа (Справочник)
 minio_folder_docs_name = MINIO_FOLDER_DOCS_NAME_MANUAL  # <================================= Выбери папку, в которую будет записываться инфа (Справочник)
 
 name_of_bucket_minio = MINIO_BUCKET_NAME
-path_of_pdf_for_convert = r"C:\Project1\GITProjects\myproject2\add_docs_to_milvus\Ents.docx"  # <============== Путь к файлу для добавления его в БД
-description_milvus_collection = (
-    "Мануал по Энтам"  # <============== Описание коллекции milvus
-)
+
+milvus_collection_base = "Docs"  # <============== Название коллекции в Milvus
+
+
+# name_documents = "Simrad Autopilot System AP70, AP80 Installation Manual"  # <============== Описание коллекции milvus
+
+# path_of_doc_for_convert = r"C:\Project1\GITProjects\myproject2\add_docs_to_milvus\Simrad Autopilot System AP70, AP80 Installation Manual.docx"  # <============== Путь к файлу для добавления его в БД
+# description_milvus_collection = name_documents + ".pdf"
+
 
 openai.api_key = OPENAI_API_KEY
 
@@ -92,23 +113,118 @@ if s3_client.list_buckets().get("Buckets", None):
         s3_client.create_bucket(Bucket=name_of_bucket_minio)"""
 
 # Создание коллекции Milvus (если её нет)
-collection_name = name_of_collection_milvus
-if not utility.has_collection(collection_name):
-    fields = [
-        FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
-        FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=1536),
-        FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
-        FieldSchema(name="reference", dtype=DataType.VARCHAR, max_length=65535),
-        FieldSchema(name="figure_id", dtype=DataType.VARCHAR, max_length=100),
-        FieldSchema(name="related_table", dtype=DataType.VARCHAR, max_length=65535),
-    ]
-    schema = CollectionSchema(fields, description=description_milvus_collection)
-    collection = Collection(name=collection_name, schema=schema)
-else:
-    collection = Collection(name=collection_name)
 
-# Загрузка модели spaCy
-nlp = spacy.load("ru_core_news_lg")
+
+# Функция обрабатывает данные из Word, создает эмбеддинги и сохраняет все в Milvus
+def process_content_from_word(word_path, bucket_name, batch_size=50):
+    """Обрабатывает текст, таблицы и изображения из Word файла и сохраняет в Milvus батчами."""
+    successful_embeddings_count = 0
+    text_blocks_with_refs, full_text = extract_content_from_word(word_path, bucket_name)
+    text_blocks = split_text_logically(full_text)
+
+    # Данные для батч-вставки
+    embeddings_batch = []
+    texts_batch = []
+    references_batch = []
+    figure_ids_batch = []
+    related_tables_batch = []
+
+    # **Добавление имени коллекции в Milvus как первый элемент**
+    collection_name_block = description_milvus_collection  # Имя коллекции
+    collection_name_embedding = create_embeddings(collection_name_block)
+    if collection_name_embedding:
+        embeddings_batch.append(
+            np.array(collection_name_embedding, dtype=np.float32).tolist()
+        )
+        texts_batch.append(collection_name_block)
+        references_batch.append("")
+        figure_ids_batch.append("")
+        related_tables_batch.append("")
+        successful_embeddings_count += 1
+
+    # Обрабатываем текстовые блоки
+    for block in text_blocks:
+        if block and block.strip():  # Проверка, чтобы блок текста не был пустым
+            embedding = create_embeddings(block)
+            if embedding is None:
+                continue
+            embeddings_batch.append(np.array(embedding, dtype=np.float32).tolist())
+            texts_batch.append(block)
+            references_batch.append("")
+            figure_ids_batch.append("")
+            related_tables_batch.append("")
+            successful_embeddings_count += 1
+
+            # Если размер батча достиг предела, вставляем его
+            if len(embeddings_batch) >= batch_size:
+                insert_batch_to_milvus(
+                    embeddings_batch,
+                    texts_batch,
+                    references_batch,
+                    figure_ids_batch,
+                    related_tables_batch,
+                )
+                (
+                    embeddings_batch,
+                    texts_batch,
+                    references_batch,
+                    figure_ids_batch,
+                    related_tables_batch,
+                ) = ([], [], [], [], [])
+
+    # Обрабатываем метаинформацию (ссылки, рисунки, таблицы)
+    for ref_info in text_blocks_with_refs:
+        text = ref_info["text"]
+        reference = ref_info["reference"]
+        figure_id = ref_info["figure_id"]
+        related_table = ref_info["related_table"]
+        if text and text.strip():
+            embedding = create_embeddings(text)
+            if embedding is None:
+                continue
+            embeddings_batch.append(np.array(embedding, dtype=np.float32).tolist())
+            texts_batch.append(text)
+            references_batch.append(reference)
+            figure_ids_batch.append(figure_id)
+            related_tables_batch.append(related_table)
+            successful_embeddings_count += 1
+
+            # Если размер батча достиг предела, вставляем его
+            if len(embeddings_batch) >= batch_size:
+                insert_batch_to_milvus(
+                    embeddings_batch,
+                    texts_batch,
+                    references_batch,
+                    figure_ids_batch,
+                    related_tables_batch,
+                )
+                (
+                    embeddings_batch,
+                    texts_batch,
+                    references_batch,
+                    figure_ids_batch,
+                    related_tables_batch,
+                ) = ([], [], [], [], [])
+
+    # Вставляем оставшиеся данные, если батч не пустой
+    if embeddings_batch:
+        insert_batch_to_milvus(
+            embeddings_batch,
+            texts_batch,
+            references_batch,
+            figure_ids_batch,
+            related_tables_batch,
+        )
+
+    collection.flush()
+    print(f"Количество успешно созданных эмбеддингов: {successful_embeddings_count}")
+
+
+def insert_batch_to_milvus(embeddings, texts, references, figure_ids, related_tables):
+    """Вставляет батч данных в Milvus."""
+    data = [embeddings, texts, references, figure_ids, related_tables]
+    collection.insert(data)
+    print(f"Батч из {len(embeddings)} записей успешно добавлен.")
 
 
 # Функция создает эмбеддинги ко всему тексту (описание рисунков, текста таблиц, любого текста)
@@ -122,7 +238,7 @@ def create_embeddings(text, pause_duration=0.5):
         response = openai.embeddings.create(
             input=[text], model="text-embedding-ada-002"
         )
-        time.sleep(pause_duration)
+        # time.sleep(pause_duration) # <================================== Тайм Слип для обхода ограничений на кол-во запросов
         return response.data[0].embedding
     except Exception as e:
         print(f"Ошибка при создании эмбеддинга: {e}")
@@ -152,19 +268,31 @@ num_tokens = count_tokens(text)
 print(f"Количество токенов: {num_tokens}")
 
 
-# Функция создает лог блоки из текста вне таблиц
 def split_text_logically(text):
-    """Разделяет текст на логические блоки."""
-    doc = nlp(text)
-    logical_blocks = []
-    current_block = []
-    for sent in doc.sents:
-        current_block.append(sent.text)
-        if len(" ".join(current_block)) > 500:
-            logical_blocks.append(" ".join(current_block))
-            current_block = []
-    if current_block:
-        logical_blocks.append(" ".join(current_block))
+    """
+    Разделяет текст на логические блоки по 500 символов, соблюдая границы абзацев.
+    """
+    paragraphs = text.split("\n")  # Разделяем текст на абзацы
+    logical_blocks = []  # Список для хранения логических блоков
+    current_block = ""  # Текущий блок текста
+
+    for paragraph in paragraphs:
+        paragraph = paragraph.strip()  # Убираем лишние пробелы
+        if not paragraph:
+            continue  # Пропускаем пустые абзацы
+
+        # Если добавление текущего абзаца не превышает 500 символов, добавляем его
+        if len(current_block) + len(paragraph) + 1 <= 500:  # +1 для пробела/разделителя
+            current_block += paragraph + " "
+        else:
+            # Если текущий блок превышает 500 символов, сохраняем его и начинаем новый
+            logical_blocks.append(current_block.strip())
+            current_block = paragraph + " "
+
+    # Добавляем последний блок, если он не пустой
+    if current_block.strip():
+        logical_blocks.append(current_block.strip())
+
     return logical_blocks
 
 
@@ -224,31 +352,48 @@ def split_table_text_logically(table_data):
     return logical_blocks
 
 
-# Функция сохраняет таблицу в MiniO в формате XLSX
-def save_table_to_minio(bucket_name, table_name, table_data):
-    """Сохраняет таблицу в MinIO в формате XLSX"""
-    workbook = Workbook()
-    sheet = workbook.active
+# Функция сохраняет исходный файл в MiniO
+def save_table_to_minio(bucket_name, description_milvus_collection):
+    """
+    Сохраняет файл, соответствующий значению переменной description_milvus_collection, в MinIO.
 
-    # Добавляем строки таблицы в Excel
-    for row_data in table_data:
-        sheet.append(row_data)
+    Args:
+        bucket_name (str): Название бакета в MinIO.
+        description_milvus_collection (str): Имя файла для поиска и сохранения.
+    """
+    try:
+        # Генерируем полный путь к файлу
+        file_path = os.path.join(DOCX_DIRECTORY, description_milvus_collection)
 
-    # Сохраняем данные в буфер для XLSX
-    buffer_xlsx = BytesIO()
-    workbook.save(buffer_xlsx)
-    buffer_xlsx.seek(0)
+        # Проверяем, существует ли файл
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(
+                f"Файл {description_milvus_collection} не найден в {DOCX_DIRECTORY}."
+            )
 
-    # Сохраняем XLSX в MinIO
-    xlsx_key = f"{minio_folder_docs_name}/{table_name}.xlsx"
-    s3_client.put_object(
-        Bucket=bucket_name,
-        Key=xlsx_key,
-        Body=buffer_xlsx,
-        ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        ContentDisposition="inline",  # Указывает браузеру открывать файл, а не скачивать
-    )
-    print(f"Таблица сохранена в MinIO как {table_name}.xlsx")
+        # Открываем файл и читаем его содержимое
+        with open(file_path, "rb") as file:
+            file_data = file.read()
+
+        # Генерируем ключ для сохранения в MinIO
+        minio_key = f"{minio_folder_docs_name}/{description_milvus_collection}"
+
+        # Сохраняем файл в MinIO
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key=minio_key,
+            Body=file_data,
+            ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ContentDisposition="inline",  # Указывает браузеру открывать файл, а не скачивать
+        )
+
+        logger.info(
+            f"Файл {description_milvus_collection} успешно сохранён в MinIO под ключом {minio_key}."
+        )
+    except Exception as e:
+        logger.info(
+            f"Ошибка при сохранении файла {description_milvus_collection} в MinIO: {e}"
+        )
 
 
 # Функция сохраняет все рисунки из документа как JPEG
@@ -289,9 +434,9 @@ def extract_table_id(text):
 
 
 # Функция обрабатывает Word документ, извлекая таблицы, текст, изображения из документа и сохраняя в MiniO
-def extract_content_from_word(pdf_path, bucket_name):
+def extract_content_from_word(word_path, bucket_name):
     """Извлекает текст, таблицы и изображения из Word файла, избегая дубликатов."""
-    doc = fitz.open(pdf_path)  # Открывает PDF-файл
+    doc = Document(word_path)
     text_blocks_with_refs = []
     current_text_block = []
     current_table_data = []
@@ -309,6 +454,7 @@ def extract_content_from_word(pdf_path, bucket_name):
                     table_name = f"table_{table_counter}"
                     table_name_xlsx = f"{table_name}.xlsx"
                     # save_table_to_minio(bucket_name, table_name, current_table_data)                            <=============== Тут сохраняли таблицы в MiniO
+
                     # Сохраняем описание таблицы
                     explanation = current_text_block[-1] if current_text_block else ""
 
@@ -448,59 +594,62 @@ def extract_content_from_word(pdf_path, bucket_name):
     return text_blocks_with_refs, " ".join(current_text_block)
 
 
-# Функция обрабатывает данные из Word, создает эмбеддинги и сохраняет все в Milvus
-def process_content_from_word(pdf_path, bucket_name):
-    """Обрабатывает текст, таблицы и изображения из Word файла и сохраняет в Milvus."""
-    successful_embeddings_count = 0
-    text_blocks_with_refs, full_text = extract_content_from_word(pdf_path, bucket_name)
-    text_blocks = split_text_logically(full_text)
+# Перебор всех файлов .docx
+for docx_file in docx_files:
+    # Сохраняем имя файла без расширения
+    name_documents = os.path.splitext(docx_file)[0]
 
-    for block in text_blocks:
-        if block and block.strip():  # Проверка, чтобы блок текста не был пустым
-            embedding = create_embeddings(block)
-            if embedding is None:
-                continue
-            embedding_np = np.array(embedding, dtype=np.float32).tolist()
-            data = [[embedding_np], [block], [""], [""], [""]]
-            collection.insert(data)
-            successful_embeddings_count += 1
-            print(
-                f"Эмбеддинг и текст успешно добавлены для блока {successful_embeddings_count}."
-            )
-        else:
-            print("Пустой текст, пропуск эмбеддинга")
+    # Генерируем полный путь к файлу
+    path_of_doc_for_convert = os.path.join(DOCX_DIRECTORY, docx_file)
 
-    for ref_info in text_blocks_with_refs:
-        text = ref_info["text"]
-        reference = ref_info["reference"]
-        figure_id = ref_info["figure_id"]
-        related_table = ref_info["related_table"]
-        if text and text.strip():  # Проверка, чтобы текст описания не был пустым
-            embedding = create_embeddings(text)
-            if embedding is None:
-                continue
-            embedding_np = np.array(embedding, dtype=np.float32).tolist()
-            data = [[embedding_np], [text], [reference], [figure_id], [related_table]]
-            collection.insert(data)
-            successful_embeddings_count += 1
-            print(f"Эмбеддинг и пояснение успешно добавлены для объекта: {reference}")
-        else:
-            print("Пустое описание, пропуск эмбеддинга для объекта:", reference)
+    # Описание коллекции
+    description_milvus_collection = name_documents + end_name_docs
 
-    collection.flush()
-    print("Все эмбеддинги и данные успешно добавлены в Milvus.")
-    print(f"Количество успешно созданных эмбеддингов: {successful_embeddings_count}")
+    # Название коллекции
+    milvus_collection = f"{milvus_collection_base}{count_collection_ends}"
+
+    collection_name = milvus_collection
+    if not utility.has_collection(collection_name):
+        fields = [
+            FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
+            FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=1536),
+            FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
+            FieldSchema(name="reference", dtype=DataType.VARCHAR, max_length=65535),
+            FieldSchema(name="figure_id", dtype=DataType.VARCHAR, max_length=100),
+            FieldSchema(name="related_table", dtype=DataType.VARCHAR, max_length=65535),
+        ]
+        schema = CollectionSchema(fields, description=description_milvus_collection)
+        collection = Collection(name=collection_name, schema=schema)
+    else:
+        collection = Collection(name=collection_name)
+
+    # Загрузка модели spaCy
+    nlp = spacy.load("ru_core_news_lg")
+
+    # Пример использования
+    word_path = path_of_doc_for_convert
+    process_content_from_word(word_path, name_of_bucket_minio)
+
+    # Создание и загрузка индекса в Milvus
+    index_params = {
+        "index_type": "IVF_FLAT",
+        "metric_type": "L2",
+        "params": {"nlist": 128},
+    }
+    collection.create_index(field_name="embedding", index_params=index_params)
+    collection.load()
+    save_table_to_minio(name_of_bucket_minio, description_milvus_collection)
+
+    count_collection_ends += 1
+    print(
+        "---------------------------------------------------------------------------------------------------"
+    )
+    print(
+        f"Индекс успешно создан и коллекция '{collection_name}' загружена в БД '{change_db_of_milvus}' по счету {count_collection_ends - count_collection_starts}"
+    )
+    print(
+        "---------------------------------------------------------------------------------------------------"
+    )
 
 
-# Пример использования
-pdf_path = path_of_pdf_for_convert
-process_content_from_word(pdf_path, name_of_bucket_minio)
-
-# Создание и загрузка индекса в Milvus
-index_params = {"index_type": "IVF_FLAT", "metric_type": "L2", "params": {"nlist": 128}}
-collection.create_index(field_name="embedding", index_params=index_params)
-collection.load()
-
-print(
-    f"Индекс успешно создан и коллекция '{collection_name}' загружена в БД '{change_db_of_milvus}'."
-)
+print(f"Все коллекции загружены.")
