@@ -55,12 +55,10 @@ logging.basicConfig(
 
 # =================================================
 
-DOCX_DIRECTORY = (
-    r"C:\Project1\GITProjects\Мануалы\ЕРМАК"  # <================= Путь к файлам docx
-)
+DOCX_DIRECTORY = r"C:\Project1\GITProjects\Мануалы\ИНТЕРНЕТ от МЕГАФОН"  # <================= Путь к файлам docx
 
 # Количество коллекций + 8
-count_collection_starts = 226  # <===================== Номер коллекцииы
+count_collection_starts = 227  # <===================== Номер коллекцииы
 count_collection_ends = count_collection_starts
 
 end_name_docs = ".pdf"  # <============ Конец имени исходного файла, названия коллекции
@@ -68,6 +66,8 @@ end_name_docs = ".pdf"  # <============ Конец имени исходного
 # =================================================
 
 docx_files = [file for file in os.listdir(DOCX_DIRECTORY) if file.endswith(".docx")]
+docx_count = len(docx_files)
+print(f"Количество релевантных документов: {docx_count}")
 
 # Настройка важных переменных
 change_db_of_milvus = MILVUS_DB_NAME_FIRST  # <================================= Выбери бд, в которую будет записываться инфа (Справочник)
@@ -117,67 +117,115 @@ if s3_client.list_buckets().get("Buckets", None):
 
 
 # Функция обрабатывает данные из Word, создает эмбеддинги и сохраняет все в Milvus
-def process_content_from_word(word_path, bucket_name):
+def process_content_from_word(word_path, bucket_name, batch_size=50):
     """Обрабатывает текст, таблицы и изображения из Word файла и сохраняет в Milvus."""
     successful_embeddings_count = 0
     text_blocks_with_refs, full_text = extract_content_from_word(word_path, bucket_name)
     text_blocks = split_text_logically(full_text)
 
+    # Данные для батч-вставки
+    embeddings_batch = []
+    texts_batch = []
+    references_batch = []
+    figure_ids_batch = []
+    related_tables_batch = []
+
     # **Добавление имени коллекции в Milvus как первый элемент**
     collection_name_block = description_milvus_collection  # Имя коллекции
     collection_name_embedding = create_embeddings(collection_name_block)
     if collection_name_embedding:
-        collection_name_embedding_np = np.array(
-            collection_name_embedding, dtype=np.float32
-        ).tolist()
-        data = [
-            [collection_name_embedding_np],
-            [collection_name_block],
-            [""],
-            [""],
-            [""],
-        ]
-        collection.insert(data)
-
+        embeddings_batch.append(
+            np.array(collection_name_embedding, dtype=np.float32).tolist()
+        )
+        texts_batch.append(collection_name_block)
+        references_batch.append("")
+        figure_ids_batch.append("")
+        related_tables_batch.append("")
         successful_embeddings_count += 1
 
-        print(f"Имя коллекции '{collection_name_block}' успешно добавлено")
-
+    # Обрабатываем текстовые блоки
     for block in text_blocks:
         if block and block.strip():  # Проверка, чтобы блок текста не был пустым
             embedding = create_embeddings(block)
             if embedding is None:
                 continue
-            embedding_np = np.array(embedding, dtype=np.float32).tolist()
-            data = [[embedding_np], [block], [""], [""], [""]]
-            collection.insert(data)
+            embeddings_batch.append(np.array(embedding, dtype=np.float32).tolist())
+            texts_batch.append(block)
+            references_batch.append("")
+            figure_ids_batch.append("")
+            related_tables_batch.append("")
             successful_embeddings_count += 1
-            logger.info(
-                f"Эмбеддинг и текст успешно добавлены для блока {successful_embeddings_count}."
-            )
-        else:
-            print("Пустой текст, пропуск эмбеддинга")
 
+            # Если размер батча достиг предела, вставляем его
+            if len(embeddings_batch) >= batch_size:
+                insert_batch_to_milvus(
+                    embeddings_batch,
+                    texts_batch,
+                    references_batch,
+                    figure_ids_batch,
+                    related_tables_batch,
+                )
+                (
+                    embeddings_batch,
+                    texts_batch,
+                    references_batch,
+                    figure_ids_batch,
+                    related_tables_batch,
+                ) = ([], [], [], [], [])
+
+    # Обрабатываем метаинформацию (ссылки, рисунки, таблицы)
     for ref_info in text_blocks_with_refs:
         text = ref_info["text"]
         reference = ref_info["reference"]
         figure_id = ref_info["figure_id"]
         related_table = ref_info["related_table"]
-        if text and text.strip():  # Проверка, чтобы текст описания не был пустым
+        if text and text.strip():
             embedding = create_embeddings(text)
             if embedding is None:
                 continue
-            embedding_np = np.array(embedding, dtype=np.float32).tolist()
-            data = [[embedding_np], [text], [reference], [figure_id], [related_table]]
-            collection.insert(data)
+            embeddings_batch.append(np.array(embedding, dtype=np.float32).tolist())
+            texts_batch.append(text)
+            references_batch.append(reference)
+            figure_ids_batch.append(figure_id)
+            related_tables_batch.append(related_table)
             successful_embeddings_count += 1
-            print(f"Эмбеддинг и пояснение успешно добавлены для объекта: {reference}")
-        else:
-            print("Пустое описание, пропуск эмбеддинга для объекта:", reference)
+
+            # Если размер батча достиг предела, вставляем его
+            if len(embeddings_batch) >= batch_size:
+                insert_batch_to_milvus(
+                    embeddings_batch,
+                    texts_batch,
+                    references_batch,
+                    figure_ids_batch,
+                    related_tables_batch,
+                )
+                (
+                    embeddings_batch,
+                    texts_batch,
+                    references_batch,
+                    figure_ids_batch,
+                    related_tables_batch,
+                ) = ([], [], [], [], [])
+
+    # Вставляем оставшиеся данные, если батч не пустой
+    if embeddings_batch:
+        insert_batch_to_milvus(
+            embeddings_batch,
+            texts_batch,
+            references_batch,
+            figure_ids_batch,
+            related_tables_batch,
+        )
 
     collection.flush()
-    logger.info("Все эмбеддинги и данные успешно добавлены в Milvus.")
     print(f"Количество успешно созданных эмбеддингов: {successful_embeddings_count}")
+
+
+def insert_batch_to_milvus(embeddings, texts, references, figure_ids, related_tables):
+    """Вставляет батч данных в Milvus."""
+    data = [embeddings, texts, references, figure_ids, related_tables]
+    collection.insert(data)
+    print(f"Батч из {len(embeddings)} записей успешно добавлен.")
 
 
 # Функция создает эмбеддинги ко всему тексту (описание рисунков, текста таблиц, любого текста)
@@ -247,42 +295,6 @@ def split_text_logically(text):
         logical_blocks.append(current_block.strip())
 
     return logical_blocks
-
-
-# Функция создает лог блоки из текста таблицы
-"""def split_table_text_logically(table_data, max_length=500):
-    
-    #Разделяет текст таблицы на логические блоки, не разрывая строки между блоками.
-    #
-    #Args:
-    #    table_data (list of list of str): Данные таблицы в виде списка строк, где каждая строка - это список ячеек.
-    #    max_length (int): Максимальное количество символов в одном логическом блоке.
-    #
-    #Returns:
-    #    list of str: Список логических блоков текста таблицы.
-    #
-    logical_blocks = []
-    current_block = ""
-
-    for row in table_data:
-        row_text = "\t".join(row)  # Объединяем ячейки строки через табуляцию
-        if (
-            len(current_block) + len(row_text) + 1 <= max_length
-        ):  # +1 для разделителя строк
-            if current_block:
-                current_block += (
-                    "\n"  # Добавляем перенос строки перед новой строкой таблицы
-                )
-            current_block += row_text
-        else:
-            if current_block:  # Добавляем текущий блок в результат
-                logical_blocks.append(current_block)
-            current_block = row_text  # Начинаем новый блок с текущей строки
-
-    if current_block:  # Добавляем оставшийся блок
-        logical_blocks.append(current_block)
-
-    return logical_blocks"""
 
 
 def split_table_text_logically(table_data):
