@@ -53,17 +53,20 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-# =================================================
 
-DOCX_DIRECTORY = r"C:\Project1\GITProjects\Мануалы\ИНТЕРНЕТ от МЕГАФОН"  # <================= Путь к файлам docx
+# =======================================================================================================
+
+DOCX_DIRECTORY = (
+    r"C:\Project1\GITProjects\Мануалы\ЛАГ"  # <================= Путь к файлам docx
+)
 
 # Количество коллекций + 8
-count_collection_starts = 227  # <===================== Номер коллекцииы
-count_collection_ends = count_collection_starts
+# count_collection_starts = 227  # <===================== Номер коллекцииы
+# count_collection_ends = count_collection_starts
 
 end_name_docs = ".pdf"  # <============ Конец имени исходного файла, названия коллекции
 
-# =================================================
+# =======================================================================================================
 
 docx_files = [file for file in os.listdir(DOCX_DIRECTORY) if file.endswith(".docx")]
 docx_count = len(docx_files)
@@ -104,6 +107,15 @@ print(f'Пароль "{MINIO_SECRET_KEY}" для БД MiniO')  # Проверк�
 connections.connect(
     alias="default", host=MILVUS_HOST, port=MILVUS_PORT, db_name=change_db_of_milvus
 )
+
+# Получение списка коллекций в Milvus
+existing_collections = utility.list_collections()
+
+
+count_collection_starts = len(existing_collections) + 18
+
+logger.info(f" Номер последней коллекции {count_collection_starts - 1}")
+count_collection_ends = count_collection_starts
 
 """# Создание бакета MinIO, если он не существует
 if s3_client.list_buckets().get("Buckets", None):
@@ -610,7 +622,7 @@ for docx_file in docx_files:
         "---------------------------------------------------------------------------------------------------"
     )
     print(
-        f"Индекс успешно создан и коллекция '{collection_name}' загружена в БД '{change_db_of_milvus}' по счету {count_collection_ends - count_collection_starts}"
+        f"Индекс успешно создан и коллекция '{collection_name}''{description_milvus_collection}' загружена в БД '{change_db_of_milvus}' по счету {count_collection_ends - count_collection_starts}"
     )
     print(
         "---------------------------------------------------------------------------------------------------"

@@ -261,11 +261,18 @@ async def load_collections_data(context):
 
 # Метод для создания эмбеддинга запроса пользователя
 def create_embedding_for_query(query):
-    response = openai.embeddings.create(
-        input=[query],
-        model="text-embedding-ada-002",
-    )
-    return response.data[0].embedding
+    try:
+        response = openai.embeddings.create(
+            input=[query],
+            model="text-embedding-ada-002",
+            timeout=10,  # таймаут на получение ответа
+        )
+        return response.data[0].embedding
+    except openai.error.Timeout as e:
+        print(f"Ошибка: Таймаут запроса - {e}")
+    except Exception as e:
+        print(f"Ошибка: {e}")
+        return None
 
 
 # Метод поиска наиболее релевантных эмбеддингов
