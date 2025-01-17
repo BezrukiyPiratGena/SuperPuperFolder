@@ -2,6 +2,7 @@ import logging
 import asyncio
 from ast import Index
 import re
+import threading
 import time
 from venv import logger
 import spacy
@@ -23,6 +24,12 @@ from io import BytesIO
 from PIL import Image
 import tiktoken
 from openpyxl import Workbook
+import aioboto3
+import aiofiles
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
+from threading import Lock
+import shutil
 
 # Загрузка переменных среды
 load_dotenv("all_tockens.env")
@@ -53,16 +60,9 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-
 # =======================================================================================================
 
-DOCX_DIRECTORY = (
-    r"C:\Project1\GITProjects\Мануалы\ЛАГ"  # <================= Путь к файлам docx
-)
-
-# Количество коллекций + 8
-# count_collection_starts = 227  # <===================== Номер коллекцииы
-# count_collection_ends = count_collection_starts
+DOCX_DIRECTORY = r"C:\Project1\GITProjects\Мануалы\Магнитные компасы ЭЛЕКТРОПРИБОР"  # <================= Путь к файлам docx
 
 end_name_docs = ".pdf"  # <============ Конец имени исходного файла, названия коллекции
 
@@ -108,28 +108,14 @@ connections.connect(
     alias="default", host=MILVUS_HOST, port=MILVUS_PORT, db_name=change_db_of_milvus
 )
 
-# Получение списка коллекций в Milvus
-existing_collections = utility.list_collections()
 
-
-count_collection_starts = len(existing_collections) + 18
-
-logger.info(f" Номер последней коллекции {count_collection_starts - 1}")
-count_collection_ends = count_collection_starts
-
-"""# Создание бакета MinIO, если он не существует
-if s3_client.list_buckets().get("Buckets", None):
-    existing_buckets = [
-        bucket["Name"] for bucket in s3_client.list_buckets()["Buckets"] # <=================== пока сохранения таблиц и рисунков не требуется
-    ]
-    if name_of_bucket_minio not in existing_buckets:
-        s3_client.create_bucket(Bucket=name_of_bucket_minio)"""
-
-# Создание коллекции Milvus (если её нет)
+count_collection_ends = 8
 
 
 # Функция обрабатывает данные из Word, создает эмбеддинги и сохраняет все в Milvus
-def process_content_from_word(word_path, bucket_name, batch_size=50):
+def process_content_from_word(
+    word_path, bucket_name, description_milvus_collection, collection, batch_size=50
+):
     """Обрабатывает текст, таблицы и изображения из Word файла и сохраняет в Milvus."""
     successful_embeddings_count = 0
     text_blocks_with_refs, full_text = extract_content_from_word(word_path, bucket_name)
@@ -176,6 +162,7 @@ def process_content_from_word(word_path, bucket_name, batch_size=50):
                     references_batch,
                     figure_ids_batch,
                     related_tables_batch,
+                    collection,
                 )
                 (
                     embeddings_batch,
@@ -183,6 +170,7 @@ def process_content_from_word(word_path, bucket_name, batch_size=50):
                     references_batch,
                     figure_ids_batch,
                     related_tables_batch,
+                    collection,
                 ) = ([], [], [], [], [])
 
     # Обрабатываем метаинформацию (ссылки, рисунки, таблицы)
@@ -210,6 +198,7 @@ def process_content_from_word(word_path, bucket_name, batch_size=50):
                     references_batch,
                     figure_ids_batch,
                     related_tables_batch,
+                    collection,
                 )
                 (
                     embeddings_batch,
@@ -217,6 +206,7 @@ def process_content_from_word(word_path, bucket_name, batch_size=50):
                     references_batch,
                     figure_ids_batch,
                     related_tables_batch,
+                    collection,
                 ) = ([], [], [], [], [])
 
     # Вставляем оставшиеся данные, если батч не пустой
@@ -227,27 +217,35 @@ def process_content_from_word(word_path, bucket_name, batch_size=50):
             references_batch,
             figure_ids_batch,
             related_tables_batch,
+            collection,
         )
 
     collection.flush()
-    print(f"Количество успешно созданных эмбеддингов: {successful_embeddings_count}")
+    # print(f"Количество успешно созданных эмбеддингов: {successful_embeddings_count}")
 
 
-def insert_batch_to_milvus(embeddings, texts, references, figure_ids, related_tables):
+def insert_batch_to_milvus(
+    embeddings, texts, references, figure_ids, related_tables, collection
+):
     """Вставляет батч данных в Milvus."""
-    data = [embeddings, texts, references, figure_ids, related_tables]
-    collection.insert(data)
-    print(f"Батч из {len(embeddings)} записей успешно добавлен.")
+    try:
+        data = [embeddings, texts, references, figure_ids, related_tables]
+        collection.insert(data)
+        print(
+            f"Батч из {len(embeddings)} записей успешно добавлен в  коллекцию: {collection.name}"
+        )
+    except Exception as e:
+        print(f"Ошибка при вставке данных в Milvus: {e}")
 
 
 # Функция создает эмбеддинги ко всему тексту (описание рисунков, текста таблиц, любого текста)
-def create_embeddings(text, pause_duration=0.5):
+def create_embeddings(text):
     """Создает эмбеддинг текста с помощью OpenAI."""
+    # print("Вызов метода create_embeddings")
     if not text.strip():
         return None
     try:
-        num_tokens = count_tokens(text)
-        print(f"Количество токенов в тексте: {num_tokens}")
+        # print(f"Количество токенов в тексте: {num_tokens}")
         response = openai.embeddings.create(
             input=[text], model="text-embedding-ada-002"
         )
@@ -256,29 +254,6 @@ def create_embeddings(text, pause_duration=0.5):
     except Exception as e:
         print(f"Ошибка при создании эмбеддинга: {e}")
         return None
-
-
-# Подсчет токенов какого-то отрывка текста
-def count_tokens(text, model="text-embedding-ada-002"):
-    """
-    Подсчитывает количество токенов в тексте для указанной модели OpenAI.
-
-    Args:
-        text (str): Текст, для которого нужно посчитать токены.
-        model (str): Название модели OpenAI (по умолчанию text-embedding-ada-002).
-
-    Returns:
-        int: Количество токенов в тексте.
-    """
-    encoding = tiktoken.encoding_for_model(model)
-    tokens = encoding.encode(text)
-    return len(tokens)
-
-
-# Пример использования
-text = "Это пример текста для подсчета токенов."
-num_tokens = count_tokens(text)
-print(f"Количество токенов: {num_tokens}")
 
 
 def split_text_logically(text):
@@ -367,47 +342,11 @@ def save_table_to_minio(bucket_name, description_milvus_collection):
         logger.info(
             f"Файл {description_milvus_collection} успешно сохранён в MinIO под ключом {minio_key}."
         )
+
     except Exception as e:
         logger.info(
             f"Ошибка при сохранении файла {description_milvus_collection} в MinIO: {e}"
         )
-
-
-# Функция сохраняет все рисунки из документа как JPEG
-def save_image_to_minio(bucket_name, image_name, image_data):
-    """Сохраняет изображение в MinIO как JPEG файл и возвращает имя файла."""
-    buffer = BytesIO()
-    image_data = image_data.convert(
-        "RGB"
-    )  # Конвертируем изображение в RGB перед сохранением
-    image_data.save(buffer, format="JPEG")
-    s3_client.put_object(
-        Bucket=bucket_name,
-        Key=f"{minio_folder_docs_name}/{image_name}",
-        Body=buffer.getvalue(),
-        ContentType="image/jpeg",  # MIME-тип изображения
-        ContentDisposition="inline",  # Указывает браузеру открывать файл, а не скачивать
-    )
-    print(f"Изображение загружено в MinIO как {image_name}")
-    return image_name  # Возвращаем имя файла вместо ссылки
-
-
-# Функция для извлечения "Рисунок Х" из текста
-def extract_figure_id(text):
-    match = re.search(r"(Рисунок \d+)", text)
-    if match:
-        return match.group(1)
-    return ""
-
-
-# Функция для извлечения "Таблица Х" из названия таблицы
-def extract_table_id(text):
-    """
-    Извлекает идентификатор таблицы в формате 'Таблица X' из текста.
-    Если идентификатор не найден, возвращает пустую строку.
-    """
-    match = re.search(r"(Таблица \d+)", text, re.IGNORECASE)
-    return match.group(1) if match else ""
 
 
 # Функция обрабатывает Word документ, извлекая таблицы, текст, изображения из документа и сохраняя в MiniO
@@ -430,18 +369,15 @@ def extract_content_from_word(word_path, bucket_name):
                     # Сохраняем текущую собранную таблицу в MinIO как одну таблицу
                     table_name = f"table_{table_counter}"
                     table_name_xlsx = f"{table_name}.xlsx"
-                    # save_table_to_minio(bucket_name, table_name, current_table_data)                            <=============== Тут сохраняли таблицы в MiniO
 
                     # Сохраняем описание таблицы
                     explanation = current_text_block[-1] if current_text_block else ""
-
-                    table_id = extract_table_id(explanation)
 
                     text_blocks_with_refs.append(
                         {
                             "text": explanation,
                             "reference": "",
-                            "figure_id": table_id,
+                            "figure_id": "",
                             "related_table": "",
                         }
                     )
@@ -492,7 +428,6 @@ def extract_content_from_word(word_path, bucket_name):
 
                                 image_data = Image.open(BytesIO(image_part.blob))
                                 image_name = f"image_{image_counter}.jpeg"
-                                # save_image_to_minio(bucket_name, image_name, image_data)              <============================= Тут сохраняли Рисунки в MiniO
 
                                 # Получаем следующий параграф для описания, если он существует
                                 if paragraph_index + 1 < len(cell.paragraphs):
@@ -502,20 +437,17 @@ def extract_content_from_word(word_path, bucket_name):
                                 else:
                                     text_after_image = "Описание отсутствует"
 
-                                # Извлекаем "Рисунок Х" из описания, если оно есть
-                                figure_id = extract_figure_id(text_after_image)
-
                                 # Добавляем запись с `text`, `reference` и `figure_id`
                                 text_blocks_with_refs.append(
                                     {
                                         "text": text_after_image,
                                         "reference": "",
-                                        "figure_id": figure_id,
+                                        "figure_id": "",
                                         "related_table": f"table_{table_counter}.xlsx",  # Смещение на 1 для таблицы
                                     }
                                 )
                                 print(
-                                    f"Изображение {image_name} загружено с описанием: {text_after_image}, figure_id: {figure_id}, related_table: {table_name_xlsx}"
+                                    f"Изображение {image_name} загружено с описанием: {text_after_image}, related_table: {table_name_xlsx}"
                                 )
                                 image_counter += 1
             last_was_table = True
@@ -539,7 +471,6 @@ def extract_content_from_word(word_path, bucket_name):
 
                 image_data = Image.open(BytesIO(image_part.blob))
                 image_name = f"image_{image_counter}.jpeg"
-                # save_image_to_minio(bucket_name, image_name, image_data)               <============================= Тут сохраняли Рисунки в MiniO
 
                 # Ищем текст непосредственно после изображения
                 try:
@@ -552,41 +483,85 @@ def extract_content_from_word(word_path, bucket_name):
                 except StopIteration:
                     text_after_image = "Описание отсутствует"
 
-                # Извлекаем "Рисунок Х" для сохранения в поле figure_id
-                figure_id = extract_figure_id(text_after_image)
-
                 text_blocks_with_refs.append(
                     {
                         "text": text_after_image,
                         "reference": "",
-                        "figure_id": figure_id,
+                        "figure_id": "",
                         "related_table": "",  # Поле остаётся пустым
                     }
                 )
                 print(
-                    f"Изображение {image_name} загружено с описанием: {text_after_image} и 'figure_id': {figure_id}"
+                    f"Изображение {image_name} загружено с описанием: {text_after_image}"
                 )
                 image_counter += 1
 
     return text_blocks_with_refs, " ".join(current_text_block)
 
 
-# Перебор всех файлов .docx
-for docx_file in docx_files:
-    # Сохраняем имя файла без расширения
+collection_lock = threading.Lock()
+
+
+def get_unique_collection_name(base_name, start_index):
+    """
+    Получает уникальное имя коллекции, проверяя существование коллекций в Milvus.
+
+    Args:
+        base_name (str): Базовое имя коллекции (например, "Docs").
+        start_index (int): Начальный индекс для генерации имени коллекции.
+
+    Returns:
+        str: Уникальное имя коллекции.
+    """
+    global count_collection_ends  # Указываем, что переменная глобальная
+
+    with collection_lock:  # Только один поток заходит сюда одновременно
+        while True:
+
+            collection_name = f"{base_name}{start_index}"
+
+            # print(f"Проверяем коллекцию: {collection_name}")
+            try:
+                if not utility.has_collection(collection_name):
+                    # Если коллекции нет, создаём её
+                    if start_index % 20 == 0:
+                        count_collection_ends = start_index
+                    return collection_name
+
+            except Exception as e:
+                print(f"Ошибка при проверке коллекции {collection_name}: {e}")
+            start_index += 1
+
+            # print(f"Увеличиваем индекс: {start_index}")
+
+
+def process_docx_file(docx_file, s3_client):
+    """Асинхронная функция для обработки одного файла."""
+    print(f"Метод process_docx_file запустился для {docx_file}")
+
+    # Работа с Milvus
+
     name_documents = os.path.splitext(docx_file)[0]
-
-    # Генерируем полный путь к файлу
     path_of_doc_for_convert = os.path.join(DOCX_DIRECTORY, docx_file)
-
-    # Описание коллекции
     description_milvus_collection = name_documents + end_name_docs
+    # print(f"description_milvus_collection {description_milvus_collection}")
 
-    # Название коллекции
-    milvus_collection = f"{milvus_collection_base}{count_collection_ends}"
+    # Уникальное имя коллекции
+    milvus_collection = get_unique_collection_name(
+        milvus_collection_base, count_collection_ends
+    )
 
-    collection_name = milvus_collection
-    if not utility.has_collection(collection_name):
+    # Загрузка файла в MinIO
+    minio_key = f"{minio_folder_docs_name}/{description_milvus_collection}"
+    # print(f"minio_key {minio_key}")
+    # bucket_name = MINIO_BUCKET_NAME
+    """try:
+        with open(f"path_to_file/{docx_file}", "rb") as file_data:
+            s3_client.put_object(Bucket=bucket_name, Key=minio_key, Body=file_data)
+    except Exception as e:
+        print(f"Ошибка загрузки в MinIO: {e}")"""
+
+    if not utility.has_collection(milvus_collection):
         fields = [
             FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
             FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=1536),
@@ -596,17 +571,24 @@ for docx_file in docx_files:
             FieldSchema(name="related_table", dtype=DataType.VARCHAR, max_length=65535),
         ]
         schema = CollectionSchema(fields, description=description_milvus_collection)
-        collection = Collection(name=collection_name, schema=schema)
+        collection = Collection(name=milvus_collection, schema=schema)
     else:
-        collection = Collection(name=collection_name)
+        collection = Collection(name=milvus_collection)
 
     # Загрузка модели spaCy
     nlp = spacy.load("ru_core_news_lg")
 
-    # Пример использования
-    word_path = path_of_doc_for_convert
-    process_content_from_word(word_path, name_of_bucket_minio)
+    process_content_from_word(
+        path_of_doc_for_convert,
+        name_of_bucket_minio,
+        description_milvus_collection,
+        collection,
+    )
 
+    print(
+        "---------------------------------------------------------------------------------------------------"
+    )
+    print("Начало загрузки коллекции в Milvus")
     # Создание и загрузка индекса в Milvus
     index_params = {
         "index_type": "IVF_FLAT",
@@ -617,16 +599,47 @@ for docx_file in docx_files:
     collection.load()
     save_table_to_minio(name_of_bucket_minio, description_milvus_collection)
 
-    count_collection_ends += 1
     print(
         "---------------------------------------------------------------------------------------------------"
     )
     print(
-        f"Индекс успешно создан и коллекция '{collection_name}''{description_milvus_collection}' загружена в БД '{change_db_of_milvus}' по счету {count_collection_ends - count_collection_starts}"
+        f"Индекс успешно создан и коллекция '{milvus_collection}''{description_milvus_collection}' загружена в БД '{change_db_of_milvus}'"
     )
     print(
         "---------------------------------------------------------------------------------------------------"
     )
+
+
+def main():
+    # Создаем подключение один раз
+    try:
+        milvus_collection = connections.connect(
+            alias="default",
+            host=MILVUS_HOST,
+            port=MILVUS_PORT,
+            db_name=change_db_of_milvus,
+        )
+        print("Подключение к Milvus успешно установлено!")
+    except Exception as e:
+        print(f"Ошибка подключения к Milvus: {e}")
+    s3_client = boto3.client(
+        "s3",
+        endpoint_url=MINIO_ENDPOINT,
+        aws_access_key_id=MINIO_ACCESS_KEY,
+        aws_secret_access_key=MINIO_SECRET_KEY,
+        region_name=MINIO_REGION_NAME,
+    )
+
+    # Передаем подключение в потоки
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        executor.map(
+            lambda docx_file: process_docx_file(docx_file, s3_client),
+            docx_files,
+        )
+
+
+if __name__ == "__main__":
+    main()
 
 
 print(f"Все коллекции загружены.")
