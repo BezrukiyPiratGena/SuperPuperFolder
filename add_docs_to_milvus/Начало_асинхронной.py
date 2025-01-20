@@ -2,6 +2,7 @@ import logging
 import asyncio
 from ast import Index
 import re
+import threading
 import time
 from venv import logger
 import spacy
@@ -25,6 +26,10 @@ import tiktoken
 from openpyxl import Workbook
 import aioboto3
 import aiofiles
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
+from threading import Lock
+import shutil
 
 # Загрузка переменных среды
 load_dotenv("all_tockens.env")
@@ -55,16 +60,9 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-
 # =======================================================================================================
 
-DOCX_DIRECTORY = (
-    r"C:\Project1\GITProjects\Мануалы\ааа\ЛАГ"  # <================= Путь к файлам docx
-)
-
-# Количество коллекций + 8
-# count_collection_starts = 227  # <===================== Номер коллекцииы
-# count_collection_ends = count_collection_starts
+DOCX_DIRECTORY = r"C:\Project1\GITProjects\Мануалы\На СЕРВАК 2\test"  # <================= Путь к файлам docx
 
 end_name_docs = ".pdf"  # <============ Конец имени исходного файла, названия коллекции
 
@@ -110,27 +108,18 @@ connections.connect(
     alias="default", host=MILVUS_HOST, port=MILVUS_PORT, db_name=change_db_of_milvus
 )
 
-# Получение списка коллекций в Milvus
-existing_collections = utility.list_collections()
 
-
-# count_collection_starts = len(existing_collections) + 18
-count_collection_starts = 8
-
-print(f" Номер последней коллекции {count_collection_starts - 1}")
-count_collection_ends = count_collection_starts
+count_collection_ends = 8
 
 
 # Функция обрабатывает данные из Word, создает эмбеддинги и сохраняет все в Milvus
-async def process_content_from_word(
+def process_content_from_word(
     word_path, bucket_name, description_milvus_collection, collection, batch_size=50
 ):
     """Обрабатывает текст, таблицы и изображения из Word файла и сохраняет в Milvus."""
     successful_embeddings_count = 0
-    text_blocks_with_refs, full_text = await extract_content_from_word(
-        word_path, bucket_name
-    )
-    text_blocks = await split_text_logically(full_text)
+    text_blocks_with_refs, full_text = extract_content_from_word(word_path, bucket_name)
+    text_blocks = split_text_logically(full_text)
 
     # Данные для батч-вставки
     embeddings_batch = []
@@ -141,7 +130,7 @@ async def process_content_from_word(
 
     # **Добавление имени коллекции в Milvus как первый элемент**
     collection_name_block = description_milvus_collection  # Имя коллекции
-    collection_name_embedding = await create_embeddings(collection_name_block)
+    collection_name_embedding = create_embeddings(collection_name_block)
     if collection_name_embedding:
         embeddings_batch.append(
             np.array(collection_name_embedding, dtype=np.float32).tolist()
@@ -155,7 +144,7 @@ async def process_content_from_word(
     # Обрабатываем текстовые блоки
     for block in text_blocks:
         if block and block.strip():  # Проверка, чтобы блок текста не был пустым
-            embedding = await create_embeddings(block)
+            embedding = create_embeddings(block)
             if embedding is None:
                 continue
             embeddings_batch.append(np.array(embedding, dtype=np.float32).tolist())
@@ -167,7 +156,7 @@ async def process_content_from_word(
 
             # Если размер батча достиг предела, вставляем его
             if len(embeddings_batch) >= batch_size:
-                await insert_batch_to_milvus(
+                insert_batch_to_milvus(
                     embeddings_batch,
                     texts_batch,
                     references_batch,
@@ -191,7 +180,7 @@ async def process_content_from_word(
         figure_id = ref_info["figure_id"]
         related_table = ref_info["related_table"]
         if text and text.strip():
-            embedding = await create_embeddings(text)
+            embedding = create_embeddings(text)
             if embedding is None:
                 continue
             embeddings_batch.append(np.array(embedding, dtype=np.float32).tolist())
@@ -203,7 +192,7 @@ async def process_content_from_word(
 
             # Если размер батча достиг предела, вставляем его
             if len(embeddings_batch) >= batch_size:
-                await insert_batch_to_milvus(
+                insert_batch_to_milvus(
                     embeddings_batch,
                     texts_batch,
                     references_batch,
@@ -222,7 +211,7 @@ async def process_content_from_word(
 
     # Вставляем оставшиеся данные, если батч не пустой
     if embeddings_batch:
-        await insert_batch_to_milvus(
+        insert_batch_to_milvus(
             embeddings_batch,
             texts_batch,
             references_batch,
@@ -232,10 +221,10 @@ async def process_content_from_word(
         )
 
     collection.flush()
-    print(f"Количество успешно созданных эмбеддингов: {successful_embeddings_count}")
+    # print(f"Количество успешно созданных эмбеддингов: {successful_embeddings_count}")
 
 
-async def insert_batch_to_milvus(
+def insert_batch_to_milvus(
     embeddings, texts, references, figure_ids, related_tables, collection
 ):
     """Вставляет батч данных в Milvus."""
@@ -250,8 +239,9 @@ async def insert_batch_to_milvus(
 
 
 # Функция создает эмбеддинги ко всему тексту (описание рисунков, текста таблиц, любого текста)
-async def create_embeddings(text, pause_duration=0.5):
+def create_embeddings(text):
     """Создает эмбеддинг текста с помощью OpenAI."""
+    # print("Вызов метода create_embeddings")
     if not text.strip():
         return None
     try:
@@ -266,7 +256,7 @@ async def create_embeddings(text, pause_duration=0.5):
         return None
 
 
-async def split_text_logically(text):
+def split_text_logically(text):
     """
     Разделяет текст на логические блоки по 500 символов, соблюдая границы абзацев.
     """
@@ -294,7 +284,7 @@ async def split_text_logically(text):
     return logical_blocks
 
 
-async def split_table_text_logically(table_data):
+def split_table_text_logically(table_data):
     """
     Разделяет таблицу на логические блоки, обрабатывая каждую строку индивидуально.
 
@@ -315,7 +305,7 @@ async def split_table_text_logically(table_data):
 
 
 # Функция сохраняет исходный файл в MiniO
-async def save_table_to_minio(bucket_name, description_milvus_collection):
+def save_table_to_minio(bucket_name, description_milvus_collection):
     """
     Сохраняет файл, соответствующий значению переменной description_milvus_collection, в MinIO.
 
@@ -334,32 +324,25 @@ async def save_table_to_minio(bucket_name, description_milvus_collection):
             )
 
         # Открываем файл и читаем его содержимое
-        async with aiofiles.open(file_path, "rb") as file:
-            file_data = await file.read()
+        with open(file_path, "rb") as file:
+            file_data = file.read()
 
         # Генерируем ключ для сохранения в MinIO
         minio_key = f"{minio_folder_docs_name}/{description_milvus_collection}"
 
         # Сохраняем файл в MinIO
-
-        async with aioboto3.client(
-            "s3",
-            endpoint_url=MINIO_ENDPOINT,
-            aws_access_key_id=MINIO_ACCESS_KEY,
-            aws_secret_access_key=MINIO_SECRET_KEY,
-            region_name=MINIO_REGION_NAME,
-        ) as s3_client:
-            await s3_client.put_object(
-                Bucket=bucket_name,
-                Key=minio_key,
-                Body=file_data,
-                ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                ContentDisposition="inline",  # Указывает браузеру открывать файл, а не скачивать
-            )
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key=minio_key,
+            Body=file_data,
+            ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ContentDisposition="inline",  # Указывает браузеру открывать файл, а не скачивать
+        )
 
         logger.info(
             f"Файл {description_milvus_collection} успешно сохранён в MinIO под ключом {minio_key}."
         )
+
     except Exception as e:
         logger.info(
             f"Ошибка при сохранении файла {description_milvus_collection} в MinIO: {e}"
@@ -367,7 +350,7 @@ async def save_table_to_minio(bucket_name, description_milvus_collection):
 
 
 # Функция обрабатывает Word документ, извлекая таблицы, текст, изображения из документа и сохраняя в MiniO
-async def extract_content_from_word(word_path, bucket_name):
+def extract_content_from_word(word_path, bucket_name):
     """Извлекает текст, таблицы и изображения из Word файла, избегая дубликатов."""
     doc = Document(word_path)
     text_blocks_with_refs = []
@@ -399,9 +382,7 @@ async def extract_content_from_word(word_path, bucket_name):
                         }
                     )
                     # Обрабатываем текст из таблицы и сохраняем в Milvus
-                    table_text_blocks = await split_table_text_logically(
-                        current_table_data
-                    )
+                    table_text_blocks = split_table_text_logically(current_table_data)
                     for block in table_text_blocks:
                         text_blocks_with_refs.append(
                             {
@@ -518,10 +499,10 @@ async def extract_content_from_word(word_path, bucket_name):
     return text_blocks_with_refs, " ".join(current_text_block)
 
 
-collection_lock = asyncio.Lock()
+collection_lock = threading.Lock()
 
 
-async def get_unique_collection_name(base_name, start_index):
+def get_unique_collection_name(base_name, start_index):
     """
     Получает уникальное имя коллекции, проверяя существование коллекций в Milvus.
 
@@ -532,28 +513,92 @@ async def get_unique_collection_name(base_name, start_index):
     Returns:
         str: Уникальное имя коллекции.
     """
-    async with (
-        collection_lock
-    ):  # Гарантирует, что только один поток выполняет проверку одновременно
-        while True:
-            collection_name = f"{base_name}{start_index}"
-            if not utility.has_collection(collection_name):
-                # Если коллекции нет, создаём её
+    global count_collection_ends  # Указываем, что переменная глобальная
 
-                return collection_name
+    with collection_lock:  # Только один поток заходит сюда одновременно
+        while True:
+
+            collection_name = f"{base_name}{start_index}"
+
+            # print(f"Проверяем коллекцию: {collection_name}")
+            try:
+                if not utility.has_collection(collection_name):
+                    # Если коллекции нет, создаём её
+                    if start_index % 20 == 0:
+                        count_collection_ends = start_index
+                    return collection_name
+
+            except Exception as e:
+                print(f"Ошибка при проверке коллекции {collection_name}: {e}")
             start_index += 1
 
+            # print(f"Увеличиваем индекс: {start_index}")
 
-async def process_docx_file(docx_file):
+
+# метод для перемещения отработанных мануалов(оригиналов)
+def move_file(file_name, destination_path):
+    """
+    Перемещает файл из текущего местоположения в указанный путь.
+
+    Args:
+        file_name (str): Название файла для перемещения.
+        destination_path (str): Путь, куда переместить файл.
+
+    Raises:
+        FileNotFoundError: Если файл не найден.
+        Exception: Если возникает ошибка при перемещении.
+    """
+    try:
+        # Получаем полный путь к файлу
+        current_directory = destination_path  # Текущая директория
+        source_path = os.path.join(current_directory, file_name)
+
+        # Проверяем, существует ли файл
+        if not os.path.exists(source_path):
+            raise FileNotFoundError(
+                f"Файл {file_name} не найден в {current_directory}."
+            )
+
+        # Проверяем, существует ли целевая папка, и создаем, если нет
+        if not os.path.exists(f"{destination_path}\\ready"):
+            os.makedirs(f"{destination_path}\\ready")
+
+        # Полный путь к новому местоположению файла
+        target_path = os.path.join(f"{destination_path}\\ready", file_name)
+
+        # Перемещаем файл
+        shutil.move(source_path, target_path)
+        print(f"Файл {file_name} успешно перемещен в {destination_path}\\ready")
+
+    except Exception as e:
+        print(f"Ошибка при перемещении файла {file_name}: {e}")
+
+
+def process_docx_file(docx_file, s3_client, path_to_save_manuals):
     """Асинхронная функция для обработки одного файла."""
+    print(f"Метод process_docx_file запустился для {docx_file}")
+
+    # Работа с Milvus
+
     name_documents = os.path.splitext(docx_file)[0]
     path_of_doc_for_convert = os.path.join(DOCX_DIRECTORY, docx_file)
     description_milvus_collection = name_documents + end_name_docs
+    # print(f"description_milvus_collection {description_milvus_collection}")
 
     # Уникальное имя коллекции
-    milvus_collection = await get_unique_collection_name(
+    milvus_collection = get_unique_collection_name(
         milvus_collection_base, count_collection_ends
     )
+
+    # Загрузка файла в MinIO
+    minio_key = f"{minio_folder_docs_name}/{description_milvus_collection}"
+    # print(f"minio_key {minio_key}")
+    # bucket_name = MINIO_BUCKET_NAME
+    """try:
+        with open(f"path_to_file/{docx_file}", "rb") as file_data:
+            s3_client.put_object(Bucket=bucket_name, Key=minio_key, Body=file_data)
+    except Exception as e:
+        print(f"Ошибка загрузки в MinIO: {e}")"""
 
     if not utility.has_collection(milvus_collection):
         fields = [
@@ -569,10 +614,7 @@ async def process_docx_file(docx_file):
     else:
         collection = Collection(name=milvus_collection)
 
-    # Загрузка модели spaCy
-    nlp = spacy.load("ru_core_news_lg")
-
-    await process_content_from_word(
+    process_content_from_word(
         path_of_doc_for_convert,
         name_of_bucket_minio,
         description_milvus_collection,
@@ -592,25 +634,49 @@ async def process_docx_file(docx_file):
     collection.create_index(field_name="embedding", index_params=index_params)
     collection.load()
     save_table_to_minio(name_of_bucket_minio, description_milvus_collection)
+    move_file(description_milvus_collection, path_to_save_manuals)
 
     print(
         "---------------------------------------------------------------------------------------------------"
     )
     print(
-        f"Индекс успешно создан и коллекция '{milvus_collection}''{description_milvus_collection}' загружена в БД '{change_db_of_milvus}' по счету {count_collection_ends - count_collection_starts}"
+        f"Индекс успешно создан и коллекция '{milvus_collection}''{description_milvus_collection}' загружена в БД '{change_db_of_milvus}'"
     )
     print(
         "---------------------------------------------------------------------------------------------------"
     )
 
 
-async def main():
-    tasks = [process_docx_file(docx_file) for docx_file in docx_files]
-    await asyncio.gather(*tasks)  # Выполнить все задачи
+def main():
+    # Создаем подключение один раз
+    try:
+        milvus_collection = connections.connect(
+            alias="default",
+            host=MILVUS_HOST,
+            port=MILVUS_PORT,
+            db_name=change_db_of_milvus,
+        )
+        print("Подключение к Milvus успешно установлено!")
+    except Exception as e:
+        print(f"Ошибка подключения к Milvus: {e}")
+    s3_client = boto3.client(
+        "s3",
+        endpoint_url=MINIO_ENDPOINT,
+        aws_access_key_id=MINIO_ACCESS_KEY,
+        aws_secret_access_key=MINIO_SECRET_KEY,
+        region_name=MINIO_REGION_NAME,
+    )
+
+    # Передаем подключение в потоки
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        executor.map(
+            lambda docx_file: process_docx_file(docx_file, s3_client, DOCX_DIRECTORY),
+            docx_files,
+        )
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
 
 
 print(f"Все коллекции загружены.")

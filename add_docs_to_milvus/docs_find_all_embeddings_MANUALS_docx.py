@@ -62,7 +62,7 @@ logging.basicConfig(
 
 # =======================================================================================================
 
-DOCX_DIRECTORY = r"C:\Project1\GITProjects\Мануалы\Магнитные компасы ЭЛЕКТРОПРИБОР"  # <================= Путь к файлам docx
+DOCX_DIRECTORY = r"C:\Project1\GITProjects\Мануалы\На СЕРВАК 2\test"  # <================= Путь к файлам docx
 
 end_name_docs = ".pdf"  # <============ Конец имени исходного файла, названия коллекции
 
@@ -535,7 +535,46 @@ def get_unique_collection_name(base_name, start_index):
             # print(f"Увеличиваем индекс: {start_index}")
 
 
-def process_docx_file(docx_file, s3_client):
+# метод для перемещения отработанных мануалов(оригиналов)
+def move_file(file_name, destination_path):
+    """
+    Перемещает файл из текущего местоположения в указанный путь.
+
+    Args:
+        file_name (str): Название файла для перемещения.
+        destination_path (str): Путь, куда переместить файл.
+
+    Raises:
+        FileNotFoundError: Если файл не найден.
+        Exception: Если возникает ошибка при перемещении.
+    """
+    try:
+        # Получаем полный путь к файлу
+        current_directory = destination_path  # Текущая директория
+        source_path = os.path.join(current_directory, file_name)
+
+        # Проверяем, существует ли файл
+        if not os.path.exists(source_path):
+            raise FileNotFoundError(
+                f"Файл {file_name} не найден в {current_directory}."
+            )
+
+        # Проверяем, существует ли целевая папка, и создаем, если нет
+        if not os.path.exists(f"{destination_path}\\ready"):
+            os.makedirs(f"{destination_path}\\ready")
+
+        # Полный путь к новому местоположению файла
+        target_path = os.path.join(f"{destination_path}\\ready", file_name)
+
+        # Перемещаем файл
+        shutil.move(source_path, target_path)
+        print(f"Файл {file_name} успешно перемещен в {destination_path}\\ready")
+
+    except Exception as e:
+        print(f"Ошибка при перемещении файла {file_name}: {e}")
+
+
+def process_docx_file(docx_file, s3_client, path_to_save_manuals):
     """Асинхронная функция для обработки одного файла."""
     print(f"Метод process_docx_file запустился для {docx_file}")
 
@@ -575,9 +614,6 @@ def process_docx_file(docx_file, s3_client):
     else:
         collection = Collection(name=milvus_collection)
 
-    # Загрузка модели spaCy
-    nlp = spacy.load("ru_core_news_lg")
-
     process_content_from_word(
         path_of_doc_for_convert,
         name_of_bucket_minio,
@@ -598,6 +634,7 @@ def process_docx_file(docx_file, s3_client):
     collection.create_index(field_name="embedding", index_params=index_params)
     collection.load()
     save_table_to_minio(name_of_bucket_minio, description_milvus_collection)
+    move_file(description_milvus_collection, path_to_save_manuals)
 
     print(
         "---------------------------------------------------------------------------------------------------"
@@ -633,7 +670,7 @@ def main():
     # Передаем подключение в потоки
     with ThreadPoolExecutor(max_workers=8) as executor:
         executor.map(
-            lambda docx_file: process_docx_file(docx_file, s3_client),
+            lambda docx_file: process_docx_file(docx_file, s3_client, DOCX_DIRECTORY),
             docx_files,
         )
 
