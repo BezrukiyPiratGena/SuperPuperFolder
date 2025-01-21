@@ -30,6 +30,9 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import ProcessPoolExecutor
 from threading import Lock
 import shutil
+import sys
+import requests
+import http.client
 
 # Загрузка переменных среды
 load_dotenv("all_tockens.env")
@@ -62,9 +65,11 @@ logging.basicConfig(
 
 # =======================================================================================================
 
-DOCX_DIRECTORY = r"C:\Project1\GITProjects\Мануалы\На СЕРВАК 2\test"  # <================= Путь к файлам docx
+DOCX_DIRECTORY = (
+    r"C:\Project1\GITProjects\Мануалы"  # <================= Путь к файлам docx
+)
 
-end_name_docs = ".pdf"  # <============ Конец имени исходного файла, названия коллекции
+end_name_docs = ".docx"  # <============ Конец имени исходного файла, названия коллекции
 
 # =======================================================================================================
 
@@ -114,7 +119,7 @@ count_collection_ends = 8
 
 # Функция обрабатывает данные из Word, создает эмбеддинги и сохраняет все в Milvus
 def process_content_from_word(
-    word_path, bucket_name, description_milvus_collection, collection, batch_size=50
+    word_path, bucket_name, description_milvus_collection, collection
 ):
     """Обрабатывает текст, таблицы и изображения из Word файла и сохраняет в Milvus."""
     successful_embeddings_count = 0
@@ -132,13 +137,17 @@ def process_content_from_word(
     collection_name_block = description_milvus_collection  # Имя коллекции
     collection_name_embedding = create_embeddings(collection_name_block)
     if collection_name_embedding:
-        embeddings_batch.append(
-            np.array(collection_name_embedding, dtype=np.float32).tolist()
-        )
-        texts_batch.append(collection_name_block)
-        references_batch.append("")
-        figure_ids_batch.append("")
-        related_tables_batch.append("")
+        collection_name_embedding_np = np.array(
+            collection_name_embedding, dtype=np.float32
+        ).tolist()
+        data = [
+            [collection_name_embedding_np],
+            [collection_name_block],
+            [""],
+            [""],
+            [""],
+        ]
+        collection.insert(data)
         successful_embeddings_count += 1
 
     # Обрабатываем текстовые блоки
@@ -147,31 +156,10 @@ def process_content_from_word(
             embedding = create_embeddings(block)
             if embedding is None:
                 continue
-            embeddings_batch.append(np.array(embedding, dtype=np.float32).tolist())
-            texts_batch.append(block)
-            references_batch.append("")
-            figure_ids_batch.append("")
-            related_tables_batch.append("")
+            embedding_np = np.array(embedding, dtype=np.float32).tolist()
+            data = [[embedding_np], [block], [""], [""], [""]]
+            collection.insert(data)
             successful_embeddings_count += 1
-
-            # Если размер батча достиг предела, вставляем его
-            if len(embeddings_batch) >= batch_size:
-                insert_batch_to_milvus(
-                    embeddings_batch,
-                    texts_batch,
-                    references_batch,
-                    figure_ids_batch,
-                    related_tables_batch,
-                    collection,
-                )
-                (
-                    embeddings_batch,
-                    texts_batch,
-                    references_batch,
-                    figure_ids_batch,
-                    related_tables_batch,
-                    collection,
-                ) = ([], [], [], [], [])
 
     # Обрабатываем метаинформацию (ссылки, рисунки, таблицы)
     for ref_info in text_blocks_with_refs:
@@ -183,42 +171,10 @@ def process_content_from_word(
             embedding = create_embeddings(text)
             if embedding is None:
                 continue
-            embeddings_batch.append(np.array(embedding, dtype=np.float32).tolist())
-            texts_batch.append(text)
-            references_batch.append(reference)
-            figure_ids_batch.append(figure_id)
-            related_tables_batch.append(related_table)
+            embedding_np = np.array(embedding, dtype=np.float32).tolist()
+            data = [[embedding_np], [text], [reference], [figure_id], [related_table]]
+            collection.insert(data)
             successful_embeddings_count += 1
-
-            # Если размер батча достиг предела, вставляем его
-            if len(embeddings_batch) >= batch_size:
-                insert_batch_to_milvus(
-                    embeddings_batch,
-                    texts_batch,
-                    references_batch,
-                    figure_ids_batch,
-                    related_tables_batch,
-                    collection,
-                )
-                (
-                    embeddings_batch,
-                    texts_batch,
-                    references_batch,
-                    figure_ids_batch,
-                    related_tables_batch,
-                    collection,
-                ) = ([], [], [], [], [])
-
-    # Вставляем оставшиеся данные, если батч не пустой
-    if embeddings_batch:
-        insert_batch_to_milvus(
-            embeddings_batch,
-            texts_batch,
-            references_batch,
-            figure_ids_batch,
-            related_tables_batch,
-            collection,
-        )
 
     collection.flush()
     # print(f"Количество успешно созданных эмбеддингов: {successful_embeddings_count}")
@@ -239,21 +195,55 @@ def insert_batch_to_milvus(
 
 
 # Функция создает эмбеддинги ко всему тексту (описание рисунков, текста таблиц, любого текста)
-def create_embeddings(text):
-    """Создает эмбеддинг текста с помощью OpenAI."""
-    # print("Вызов метода create_embeddings")
+def create_embeddings(text, max_retries=5, retry_delay=5):
+    """
+    Создает эмбеддинг текста с помощью OpenAI с повторными попытками в случае ошибки.
+
+    Args:
+        text (str): Текст для создания эмбеддинга.
+        max_retries (int): Максимальное количество попыток перед завершением.
+        retry_delay (int): Задержка между попытками (в секундах).
+
+    Returns:
+        list: Эмбеддинг текста или завершает скрипт при неудачных попытках.
+    """
     if not text.strip():
         return None
-    try:
-        # print(f"Количество токенов в тексте: {num_tokens}")
-        response = openai.embeddings.create(
-            input=[text], model="text-embedding-ada-002"
-        )
-        # time.sleep(pause_duration) # <================================== Тайм Слип для обхода ограничений на кол-во запросов
-        return response.data[0].embedding
-    except Exception as e:
-        print(f"Ошибка при создании эмбеддинга: {e}")
-        return None
+
+    attempt = 0  # Счетчик попыток
+
+    while attempt < max_retries:
+        try:
+            response = openai.embeddings.create(
+                input=[text], model="text-embedding-ada-002"
+            )
+            return response.data[0].embedding  # Возврат успешного эмбеддинга
+
+        except Exception as e:
+            attempt += 1
+            print(
+                f"Попытка {attempt}/{max_retries}: Ошибка при создании эмбеддинга: {e}"
+            )
+
+            # Если ошибка связана с API ограничениями (например, 429 или 500)
+            if "rate limit" in str(e).lower() or "server error" in str(e).lower():
+                print(f"Пауза {retry_delay} секунд перед повторной попыткой...")
+                time.sleep(retry_delay)
+                continue
+
+            # Если ошибка связана с неподдерживаемым регионом или другой критической причиной
+            if "unsupported_country_region_territory" in str(e):
+                print("Критическая ошибка: Неподдерживаемый регион.")
+                break  # Завершить попытки
+
+            # Задержка перед следующей попыткой для других ошибок
+            time.sleep(retry_delay)
+
+    # Если все попытки не удались, завершить выполнение скрипта
+    print(
+        f"Не удалось создать эмбеддинг после {max_retries} попыток. Завершение скрипта."
+    )
+    send_telegram_error_message()
 
 
 def split_text_logically(text):
@@ -502,6 +492,82 @@ def extract_content_from_word(word_path, bucket_name):
 collection_lock = threading.Lock()
 
 
+def send_telegram_error_message():
+    """
+    Отправляет сообщение об ошибке в Telegram перед завершением программы.
+
+    Args:
+        bot_token (str): Токен Telegram-бота.
+        chat_id (str): Идентификатор чата (или пользователя), куда отправить сообщение.
+        error_message (str): Сообщение об ошибке для отправки.
+
+    Raises:
+        Exception: Если возникла ошибка при отправке сообщения.
+    """
+    try:
+        conn = http.client.HTTPSConnection("api.telegram.org")
+
+        payload = (
+            '\n{\n  "chat_id": "5746497552",\n  "text": "Ссаный впн упал"\n}'.encode(
+                "utf-8"
+            )
+        )
+
+        headers = {"Content-Type": "application/json"}
+
+        conn.request(
+            "POST",
+            "/bot7219050865:AAFuYYrlMdyNTOd2Ffy83sFY-byESBF7hwQ/sendMessage",
+            payload,
+            headers,
+        )
+
+        res = conn.getresponse()
+        data = res.read()
+
+        print(data.decode("utf-8"))
+
+    except Exception as e:
+        print(f"Не удалось отправить сообщение в Telegram: {e}")
+
+
+def send_telegram_complite_message():
+    """
+    Отправляет сообщение об ошибке в Telegram перед завершением программы.
+
+    Args:
+        bot_token (str): Токен Telegram-бота.
+        chat_id (str): Идентификатор чата (или пользователя), куда отправить сообщение.
+        error_message (str): Сообщение об ошибке для отправки.
+
+    Raises:
+        Exception: Если возникла ошибка при отправке сообщения.
+    """
+    try:
+        conn = http.client.HTTPSConnection("api.telegram.org")
+
+        payload = '\n{\n  "chat_id": "5746497552",\n  "text": "Все документы загружены"\n}'.encode(
+            "utf-8"
+        )
+
+        headers = {"Content-Type": "application/json"}
+
+        conn.request(
+            "POST",
+            "/bot7219050865:AAFuYYrlMdyNTOd2Ffy83sFY-byESBF7hwQ/sendMessage",
+            payload,
+            headers,
+        )
+
+        res = conn.getresponse()
+        data = res.read()
+
+        print(data.decode("utf-8"))
+
+    except Exception as e:
+        print(f"Не удалось отправить сообщение в Telegram: {e}")
+
+
 def get_unique_collection_name(base_name, start_index):
     """
     Получает уникальное имя коллекции, проверяя существование коллекций в Milvus.
@@ -673,6 +739,7 @@ def main():
             lambda docx_file: process_docx_file(docx_file, s3_client, DOCX_DIRECTORY),
             docx_files,
         )
+    send_telegram_complite_message()
 
 
 if __name__ == "__main__":
