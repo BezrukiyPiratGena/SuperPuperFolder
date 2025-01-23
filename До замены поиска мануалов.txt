@@ -263,8 +263,8 @@ def create_embedding_for_query(query):
             timeout=10,  # таймаут на получение ответа
         )
         return response.data[0].embedding
-    # except openai.error.Timeout as e:
-    #    print(f"Ошибка: Таймаут запроса - {e}")
+    except openai.error.Timeout as e:
+        print(f"Ошибка: Таймаут запроса - {e}")
     except Exception as e:
         print(f"Ошибка: {e}")
         return None
@@ -282,57 +282,6 @@ def find_most_similar(query_embedding, top_n=15):
             all_related_tables[i] for i in most_similar_indices.flatten()
         ],  # Добавляем related_table
     )
-
-
-def search_in_milvus(query_embedding, top_n=10):
-    """
-    Ищет вектор query_embedding в указанной коллекции Milvus (collection_name),
-    возвращая top_n наиболее похожих результатов.
-
-    Параметры:
-    -----------
-    query_embedding: list или np.array
-        Вектор, который мы ищем.
-    collection_name: str
-        Название коллекции в Milvus, где искать.
-    top_n: int
-        Сколько результатов вернуть (по умолчанию 10).
-
-    Возвращает:
-    -----------
-    results: list
-        Список объектов Hit; каждый содержит поля:
-        - hit.score: оценка сходства
-        - hit.entity: словарь (по ключам из output_fields)
-    """
-    print(f"Запуск метода search_in_milvus")
-    # Убедимся, что у нас np.float32
-    if not isinstance(query_embedding, np.ndarray):
-        query_embedding = np.array(query_embedding, dtype=np.float32)
-    else:
-        query_embedding = query_embedding.astype(np.float32)
-
-    # Инициализируем объект Collection
-    collection = Collection(name="Manuals")
-
-    # Параметры поиска
-    search_params = {
-        "metric_type": "L2",  # Замените на "IP", "COSINE" и т.п. при необходимости
-        "params": {"nprobe": 10},
-    }
-
-    # Выполняем поиск
-    results = collection.search(
-        data=[query_embedding.tolist()],  # Передаём список векторов
-        anns_field="embedding",  # Поле, в котором хранятся эмбеддинги
-        param=search_params,
-        limit=top_n,
-        output_fields=["text", "reference"],  # Добавьте поля, которые нужны
-    )
-    print("Конец метода search_in_milvus")
-    # Возвращаем список Hit-объектов для нашего запроса.
-    # results[0] — это список из top_n найденных элементов
-    return results[0]
 
 
 def find_most_similar_with_collections(context, query_embedding, top_n=10):
@@ -426,7 +375,6 @@ async def metod(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Вы выбрали метод работы Бота:", reply_markup=reply_markup
     )
-    # context.user_data["handle_message_method"] = handle_message
 
 
 # Метод подсчитывает токены для конкретного отрывка текста
@@ -546,11 +494,10 @@ async def handle_message(update: Update, context):
         "handle_message_method",  # Если метод сохранён, используем его
         handle_message,  # По умолчанию - текущий метод
     )
-    print(f"handle_message_method - {handle_message_method}")
 
     # Если метод другой (например, handle_message_manuals), вызываем его
     if handle_message_method != handle_message:
-        await handle_message_manuals(update, context)
+        await handle_message_method(update, context)
         return
 
     user_id = update.message.from_user.id
@@ -785,27 +732,20 @@ def normalize_mentions(gpt_response):
 
 # Метод для обработки сообщений в режиме мануалов
 async def handle_message_manuals(update: Update, context):
-    # print("Заработал режим handle_message_manuals")
-    # print(context.user_data.get("selected_metod"))
     if context.user_data.get("selected_metod") != "manuals_engrs":
         logger.error("handle_message_manuals вызван вне режима мануалов.")
         return
 
     user_message = update.message.text
     user_tag = update.message.from_user.username or update.message.from_user.full_name
-    # print("Точка1")
-    try:
 
+    try:
         query_embedding = create_embedding_for_query(user_message)
 
         # Получаем релевантные тексты и коллекции
-        """related_collections = find_most_similar_with_collections(
+        related_collections = find_most_similar_with_collections(
             context, query_embedding
-        )"""
-        print("Точка 1")
-        related_collections = search_in_milvus(query_embedding)
-
-        print(f"Список релевантных мануалов: {related_collections}")
+        )
 
         # Собираем описания коллекций
         context_descriptions = []
@@ -1071,8 +1011,7 @@ def clear_message_bot():
 
 
 # Обработка выбора базы данных через callback кнопки в ТГ Боте
-async def select_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("Запустился метод select_db")
+"""async def select_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     context.user_data["minio_folder_docs_name"] = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK
     await query.answer()  # Подтверждаем получение запроса
@@ -1125,8 +1064,9 @@ async def select_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user=MILVUS_USER,
             password=MILVUS_PASSWORD,
         )
-    await context
+    await load_collections_data(context)
     # Загружаем коллекции при втором режиме работы
+"""
 
 
 # Метод для получения описания (description) коллекции Milvus
@@ -1166,8 +1106,7 @@ def run_async_task(task):
 
 
 # метод для обработки нажатой кнопки при выбор режима работы Бота
-async def handle_callback_metod(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # logger.info("Запустился метод handle_callback_metod")
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()  # Подтверждаем получение нажатия
 
@@ -1176,19 +1115,10 @@ async def handle_callback_metod(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text(
             "Вы выбрали режим : Поиск по справочнику📔 \n\nМожете задать вопрос"
         )
-        context.user_data["handle_message_method"] = handle_message
-        context.user_data["selected_metod"] = "engs_bot"
-
     elif query.data == "manuals_engrs":
         await query.edit_message_text(
             "Вы выбрали режим: Поиск мануалов📚 \n\nМожете задать вопрос"
         )
-        context.user_data["handle_message_method"] = handle_message_manuals
-        context.user_data["selected_metod"] = "manuals_engrs"
-
-    # print("Точка 0")
-    # print(f'handle_message_method - {context.user_data["handle_message_method"]}')
-    # print(f'selected_metod - {context.user_data["selected_metod"]}')
 
 
 # Основная функция для запуска бота
@@ -1201,7 +1131,7 @@ def main():
     application.add_handler(CommandHandler("info", info))  # Обработка команды /info
     application.add_handler(CommandHandler("metod", metod))  # Обработка команды /metod
     application.add_handler(
-        CallbackQueryHandler(handle_callback_metod)
+        CallbackQueryHandler(handle_callback)
     )  # оббработка нажатия кнопок по выбору режма работы Бота
     # application.add_handler(CallbackQueryHandler(select_db))  # Обработка кнопок
     application.add_handler(

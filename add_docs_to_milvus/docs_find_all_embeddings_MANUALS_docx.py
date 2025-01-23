@@ -66,7 +66,7 @@ logging.basicConfig(
 # =======================================================================================================
 
 DOCX_DIRECTORY = (
-    r"C:\Project1\GITProjects\Мануалы"  # <================= Путь к файлам docx
+    r"C:\Project1\GITProjects\scripts\Шлюхи"  # <================= Путь к файлам docx
 )
 
 end_name_docs = ".docx"  # <============ Конец имени исходного файла, названия коллекции
@@ -123,7 +123,9 @@ def process_content_from_word(
 ):
     """Обрабатывает текст, таблицы и изображения из Word файла и сохраняет в Milvus."""
     successful_embeddings_count = 0
-    text_blocks_with_refs, full_text = extract_content_from_word(word_path, bucket_name)
+    text_blocks_with_refs, full_text = extract_content_from_word(
+        word_path, bucket_name, description_milvus_collection
+    )
     text_blocks = split_text_logically(full_text)
 
     # Данные для батч-вставки
@@ -132,10 +134,13 @@ def process_content_from_word(
     references_batch = []
     figure_ids_batch = []
     related_tables_batch = []
+    manual_id_batch = []
 
     # **Добавление имени коллекции в Milvus как первый элемент**
     collection_name_block = description_milvus_collection  # Имя коллекции
-    collection_name_embedding = create_embeddings(collection_name_block)
+    collection_name_embedding = create_embeddings(
+        collection_name_block, description_milvus_collection
+    )
     if collection_name_embedding:
         collection_name_embedding_np = np.array(
             collection_name_embedding, dtype=np.float32
@@ -146,6 +151,7 @@ def process_content_from_word(
             [""],
             [""],
             [""],
+            [description_milvus_collection],
         ]
         collection.insert(data)
         successful_embeddings_count += 1
@@ -153,11 +159,18 @@ def process_content_from_word(
     # Обрабатываем текстовые блоки
     for block in text_blocks:
         if block and block.strip():  # Проверка, чтобы блок текста не был пустым
-            embedding = create_embeddings(block)
+            embedding = create_embeddings(block, description_milvus_collection)
             if embedding is None:
                 continue
             embedding_np = np.array(embedding, dtype=np.float32).tolist()
-            data = [[embedding_np], [block], [""], [""], [""]]
+            data = [
+                [embedding_np],
+                [block],
+                [""],
+                [""],
+                [""],
+                [description_milvus_collection],
+            ]
             collection.insert(data)
             successful_embeddings_count += 1
 
@@ -167,12 +180,21 @@ def process_content_from_word(
         reference = ref_info["reference"]
         figure_id = ref_info["figure_id"]
         related_table = ref_info["related_table"]
+        manual_id = ref_info["manual_id"]
+
         if text and text.strip():
-            embedding = create_embeddings(text)
+            embedding = create_embeddings(text, description_milvus_collection)
             if embedding is None:
                 continue
             embedding_np = np.array(embedding, dtype=np.float32).tolist()
-            data = [[embedding_np], [text], [reference], [figure_id], [related_table]]
+            data = [
+                [embedding_np],
+                [text],
+                [reference],
+                [figure_id],
+                [related_table],
+                [manual_id],
+            ]
             collection.insert(data)
             successful_embeddings_count += 1
 
@@ -195,7 +217,9 @@ def insert_batch_to_milvus(
 
 
 # Функция создает эмбеддинги ко всему тексту (описание рисунков, текста таблиц, любого текста)
-def create_embeddings(text, max_retries=5, retry_delay=5):
+def create_embeddings(
+    text, description_milvus_collection, max_retries=5, retry_delay=5
+):
     """
     Создает эмбеддинг текста с помощью OpenAI с повторными попытками в случае ошибки.
 
@@ -222,7 +246,7 @@ def create_embeddings(text, max_retries=5, retry_delay=5):
         except Exception as e:
             attempt += 1
             print(
-                f"Попытка {attempt}/{max_retries}: Ошибка при создании эмбеддинга: {e}"
+                f"Попытка {attempt}/{max_retries} коллекции {description_milvus_collection}: Ошибка при создании эмбеддинга: {e}"
             )
 
             # Если ошибка связана с API ограничениями (например, 429 или 500)
@@ -340,7 +364,7 @@ def save_table_to_minio(bucket_name, description_milvus_collection):
 
 
 # Функция обрабатывает Word документ, извлекая таблицы, текст, изображения из документа и сохраняя в MiniO
-def extract_content_from_word(word_path, bucket_name):
+def extract_content_from_word(word_path, bucket_name, description_milvus_collection):
     """Извлекает текст, таблицы и изображения из Word файла, избегая дубликатов."""
     doc = Document(word_path)
     text_blocks_with_refs = []
@@ -369,6 +393,7 @@ def extract_content_from_word(word_path, bucket_name):
                             "reference": "",
                             "figure_id": "",
                             "related_table": "",
+                            "manual_id": description_milvus_collection,
                         }
                     )
                     # Обрабатываем текст из таблицы и сохраняем в Milvus
@@ -380,6 +405,7 @@ def extract_content_from_word(word_path, bucket_name):
                                 "reference": "",
                                 "figure_id": "",
                                 "related_table": table_name_xlsx,
+                                "manual_id": description_milvus_collection,
                             }
                         )
                     current_table_data = []  # Сброс текущих данных таблицы
@@ -434,6 +460,7 @@ def extract_content_from_word(word_path, bucket_name):
                                         "reference": "",
                                         "figure_id": "",
                                         "related_table": f"table_{table_counter}.xlsx",  # Смещение на 1 для таблицы
+                                        "manual_id": description_milvus_collection,
                                     }
                                 )
                                 print(
@@ -479,6 +506,7 @@ def extract_content_from_word(word_path, bucket_name):
                         "reference": "",
                         "figure_id": "",
                         "related_table": "",  # Поле остаётся пустым
+                        "manual_id": description_milvus_collection,
                     }
                 )
                 print(
@@ -652,9 +680,10 @@ def process_docx_file(docx_file, s3_client, path_to_save_manuals):
     # print(f"description_milvus_collection {description_milvus_collection}")
 
     # Уникальное имя коллекции
-    milvus_collection = get_unique_collection_name(
+    """milvus_collection = get_unique_collection_name(
         milvus_collection_base, count_collection_ends
-    )
+    )"""
+    milvus_collection = "Manuals"
 
     # Загрузка файла в MinIO
     minio_key = f"{minio_folder_docs_name}/{description_milvus_collection}"
@@ -674,8 +703,9 @@ def process_docx_file(docx_file, s3_client, path_to_save_manuals):
             FieldSchema(name="reference", dtype=DataType.VARCHAR, max_length=65535),
             FieldSchema(name="figure_id", dtype=DataType.VARCHAR, max_length=100),
             FieldSchema(name="related_table", dtype=DataType.VARCHAR, max_length=65535),
+            FieldSchema(name="manual_id", dtype=DataType.VARCHAR, max_length=256),
         ]
-        schema = CollectionSchema(fields, description=description_milvus_collection)
+        schema = CollectionSchema(fields, description="Коллекция со всеми мануалами")
         collection = Collection(name=milvus_collection, schema=schema)
     else:
         collection = Collection(name=milvus_collection)
@@ -699,6 +729,9 @@ def process_docx_file(docx_file, s3_client, path_to_save_manuals):
     }
     collection.create_index(field_name="embedding", index_params=index_params)
     collection.load()
+    print(
+        f"Конец загрузки коллекции в Milvus {description_milvus_collection}, начало загрузки в MiniO"
+    )
     save_table_to_minio(name_of_bucket_minio, description_milvus_collection)
     move_file(description_milvus_collection, path_to_save_manuals)
 
@@ -734,7 +767,7 @@ def main():
     )
 
     # Передаем подключение в потоки
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    with ThreadPoolExecutor(max_workers=1) as executor:
         executor.map(
             lambda docx_file: process_docx_file(docx_file, s3_client, DOCX_DIRECTORY),
             docx_files,

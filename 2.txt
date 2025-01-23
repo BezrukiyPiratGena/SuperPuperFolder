@@ -284,57 +284,6 @@ def find_most_similar(query_embedding, top_n=15):
     )
 
 
-def search_in_milvus(query_embedding, top_n=10):
-    """
-    Ищет вектор query_embedding в указанной коллекции Milvus (collection_name),
-    возвращая top_n наиболее похожих результатов.
-
-    Параметры:
-    -----------
-    query_embedding: list или np.array
-        Вектор, который мы ищем.
-    collection_name: str
-        Название коллекции в Milvus, где искать.
-    top_n: int
-        Сколько результатов вернуть (по умолчанию 10).
-
-    Возвращает:
-    -----------
-    results: list
-        Список объектов Hit; каждый содержит поля:
-        - hit.score: оценка сходства
-        - hit.entity: словарь (по ключам из output_fields)
-    """
-    print(f"Запуск метода search_in_milvus")
-    # Убедимся, что у нас np.float32
-    if not isinstance(query_embedding, np.ndarray):
-        query_embedding = np.array(query_embedding, dtype=np.float32)
-    else:
-        query_embedding = query_embedding.astype(np.float32)
-
-    # Инициализируем объект Collection
-    collection = Collection(name="Manuals")
-
-    # Параметры поиска
-    search_params = {
-        "metric_type": "L2",  # Замените на "IP", "COSINE" и т.п. при необходимости
-        "params": {"nprobe": 10},
-    }
-
-    # Выполняем поиск
-    results = collection.search(
-        data=[query_embedding.tolist()],  # Передаём список векторов
-        anns_field="embedding",  # Поле, в котором хранятся эмбеддинги
-        param=search_params,
-        limit=top_n,
-        output_fields=["text", "reference"],  # Добавьте поля, которые нужны
-    )
-    print("Конец метода search_in_milvus")
-    # Возвращаем список Hit-объектов для нашего запроса.
-    # results[0] — это список из top_n найденных элементов
-    return results[0]
-
-
 def find_most_similar_with_collections(context, query_embedding, top_n=10):
     """
     Находит наиболее релевантные вектора и возвращает:
@@ -342,32 +291,80 @@ def find_most_similar_with_collections(context, query_embedding, top_n=10):
     - Коллекции, из которых взяты вектора,
     - Описание коллекций.
     """
-    user_data = context.user_data
     query_embedding_np = np.array([query_embedding], dtype=np.float32)
-    embeddings = np.array(user_data.get("all_embeddings", []))
-    collections_per_embedding = user_data.get("all_collections_per_embedding", [])
-
-    if len(embeddings) == 0:
-        return [], set()  # Пустой список текстов и коллекций
-
-    # Рассчитываем сходство
-    similarities = np.dot(embeddings, query_embedding_np.T)
-    most_similar_indices = np.argsort(similarities, axis=0)[::-1][:top_n]
-
     relevant_collections = set()
+    results = []
 
-    # Логирование найденных элементов
+    try:
+        # Получаем список всех коллекций в базе данных Milvus
+        all_collections = utility.list_collections()
+
+        for collection_name in all_collections:
+            # Проверяем, существует ли коллекция
+            if not utility.has_collection(collection_name):
+                continue
+
+            # Подключаемся к коллекции
+            collection = Collection(name=collection_name)
+
+            # Выполняем запрос на поиск схожих векторов
+            try:
+                query_result = collection.search(
+                    data=query_embedding_np.tolist(),  # Запрос в формате листа
+                    anns_field="embedding",  # Поле для поиска
+                    param={
+                        "metric_type": "L2",
+                        "params": {"nprobe": 10},
+                    },  # Метрика и параметры
+                    limit=top_n,  # Лимит результатов
+                    output_fields=[
+                        "text",
+                        "reference",
+                        "related_table",
+                    ],  # Поля для вывода
+                )
+
+                # Обрабатываем результаты поиска
+                for hit in query_result[
+                    0
+                ]:  # query_result — список результатов, берем первый
+                    results.append(
+                        {
+                            "text": hit.entity.get("text", ""),
+                            "reference": hit.entity.get("reference", ""),
+                            "related_table": hit.entity.get("related_table", ""),
+                            "collection_name": collection_name,  # Добавляем имя коллекции
+                            "score": hit.score,  # Результат сходства
+                        }
+                    )
+                    relevant_collections.add(
+                        collection_name
+                    )  # Добавляем коллекцию в список
+
+            except Exception as e:
+                logger.error(f"Ошибка при поиске в коллекции '{collection_name}': {e}")
+                continue
+
+        # Сортируем результаты по убыванию сходства
+        results = sorted(results, key=lambda x: x["score"], reverse=True)[:top_n]
+
+    except Exception as e:
+        logger.error(f"Ошибка при работе с Milvus: {e}")
+
+    # Логируем найденные элементы
     logger.info("Найденные релевантные элементы:")
-    for idx in most_similar_indices.flatten():
-        relevant_collections.add(collections_per_embedding[idx])
+    for result in results:
         logger.info(
-            f"Текст: {user_data['all_texts'][idx]}, "
-            f"Сходство: {similarities[idx][0]}"
-            f"Коллекция: {collections_per_embedding[idx]}"
+            f"Текст: {result['text']}, Сходство: {result['score']}, Коллекция: {result['collection_name']}"
         )
-    user_data["all_collections"] = list(relevant_collections)
 
-    return list(relevant_collections)
+    # Возвращаем только тексты, названия коллекций и другие данные
+    return (
+        [result["text"] for result in results],  # Тексты
+        [result["reference"] for result in results],  # Ссылки
+        [result["related_table"] for result in results],  # Таблицы
+        list(relevant_collections),  # Уникальные коллекции
+    )
 
 
 # Чтение содержимого таблицы из MinIO (S3 хранилища)
@@ -795,17 +792,13 @@ async def handle_message_manuals(update: Update, context):
     user_tag = update.message.from_user.username or update.message.from_user.full_name
     # print("Точка1")
     try:
-
         query_embedding = create_embedding_for_query(user_message)
 
         # Получаем релевантные тексты и коллекции
-        """related_collections = find_most_similar_with_collections(
+        related_collections = find_most_similar_with_collections(
             context, query_embedding
-        )"""
-        print("Точка 1")
-        related_collections = search_in_milvus(query_embedding)
-
-        print(f"Список релевантных мануалов: {related_collections}")
+        )
+        print(related_collections)
 
         # Собираем описания коллекций
         context_descriptions = []
@@ -1167,7 +1160,7 @@ def run_async_task(task):
 
 # метод для обработки нажатой кнопки при выбор режима работы Бота
 async def handle_callback_metod(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # logger.info("Запустился метод handle_callback_metod")
+    logger.info("Запустился метод handle_callback_metod")
     query = update.callback_query
     await query.answer()  # Подтверждаем получение нажатия
 
