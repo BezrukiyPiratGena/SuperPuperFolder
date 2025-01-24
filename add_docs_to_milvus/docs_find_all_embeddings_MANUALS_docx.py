@@ -732,7 +732,7 @@ def process_docx_file(docx_file, s3_client, path_to_save_manuals):
     print(
         f"Конец загрузки коллекции в Milvus {description_milvus_collection}, начало загрузки в MiniO"
     )
-    save_table_to_minio(name_of_bucket_minio, description_milvus_collection)
+    # save_table_to_minio(name_of_bucket_minio, description_milvus_collection)   #<===================== Метод загрузки исходника в MiniO
     move_file(description_milvus_collection, path_to_save_manuals)
 
     print(
@@ -767,7 +767,9 @@ def main():
     )
 
     # Передаем подключение в потоки
-    with ThreadPoolExecutor(max_workers=1) as executor:
+    with ThreadPoolExecutor(
+        max_workers=12
+    ) as executor:  # <============= max_workers - количество потоков
         executor.map(
             lambda docx_file: process_docx_file(docx_file, s3_client, DOCX_DIRECTORY),
             docx_files,

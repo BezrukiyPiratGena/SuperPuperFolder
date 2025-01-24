@@ -180,80 +180,6 @@ logger.info(f"| Коллекция справочника загружена |")
 logger.info(f"-----------------------------------")
 
 
-"""# Последовательная загрузка всех коллекций
-def load_all_collections():
-    loaded_collections = []
-    for collection_name in all_collections:
-        print(f"Загрузка коллекции '{collection_name}'...")
-        result = load_collection(collection_name)
-        if result:
-            loaded_collections.append(result)
-    return loaded_collections"""
-
-
-#
-"""def load_collection(collection_name):
-    global all_texts
-    global all_embeddings
-    global all_table_references
-    global all_related_tables
-    try:
-        # Проверяем, существует ли коллекция с указанным именем
-        if not utility.has_collection(target_collection_name):
-            raise ValueError(f"Коллекция '{target_collection_name}' не существует.")
-
-        # Загружаем коллекцию
-        collection = Collection(name=target_collection_name)
-        if collection.num_entities > 0:
-            # Загружаем данные из коллекции
-            entities = collection.query(
-                expr="id > 0",
-                output_fields=["embedding", "text", "reference", "related_table"],
-            )
-            all_texts = [entity["text"] for entity in entities]
-            all_embeddings = [entity["embedding"] for entity in entities]
-            all_table_references = [entity["reference"] for entity in entities]
-            all_related_tables = [
-                entity.get("related_table", "") for entity in entities
-            ]
-
-            logger.info(f"Коллекция '{target_collection_name}' успешно загруженаааа.")
-            logger.info("Подключение к коллекциям Milvus завершено")
-
-        else:
-            logger.info(f"Коллекция '{target_collection_name}' пуста.")
-    except Exception as e:
-        logger.info(f"Ошибка при загрузке коллекции '{target_collection_name}': {e}")
-
-    try:
-        # Инициализация коллекции
-        collection = Collection(name=collection_name)
-
-        # Проверка, есть ли в коллекции данные
-        if collection.num_entities > 0:
-            # Выполнение запроса для извлечения данных из коллекции
-            entities = collection.query(
-                expr="id > 0",
-                output_fields=["embedding", "text", "reference", "related_table"],
-            )
-            print(f"Коллекция '{collection_name}' успешно загружена2.")
-            return {
-                "name": collection_name,
-                "texts": [entity["text"] for entity in entities],
-                "embeddings": [entity["embedding"] for entity in entities],
-                "references": [entity["reference"] for entity in entities],
-                "related_tables": [
-                    entity.get("related_table", "") for entity in entities
-                ],
-            }
-        else:
-            print(f"Коллекция '{collection_name}' пуста.")
-            return None
-    except Exception as e:
-        print(f"Ошибка при загрузке коллекции '{collection_name}': {e}")
-        return None"""
-
-
 # Метод для создания эмбеддинга запроса пользователя
 def create_embedding_for_query(query):
     try:
@@ -284,7 +210,7 @@ def find_most_similar(query_embedding, top_n=15):
     )
 
 
-def search_in_milvus(query_embedding, top_n=10):
+def search_in_milvus(query_embedding, top_n=2):
     """
     Ищет вектор query_embedding в указанной коллекции Milvus (collection_name),
     возвращая top_n наиболее похожих результатов.
@@ -305,7 +231,7 @@ def search_in_milvus(query_embedding, top_n=10):
         - hit.score: оценка сходства
         - hit.entity: словарь (по ключам из output_fields)
     """
-    print(f"Запуск метода search_in_milvus")
+    # print(f"query_embedding - {query_embedding}")
     # Убедимся, что у нас np.float32
     if not isinstance(query_embedding, np.ndarray):
         query_embedding = np.array(query_embedding, dtype=np.float32)
@@ -327,12 +253,57 @@ def search_in_milvus(query_embedding, top_n=10):
         anns_field="embedding",  # Поле, в котором хранятся эмбеддинги
         param=search_params,
         limit=top_n,
-        output_fields=["text", "reference"],  # Добавьте поля, которые нужны
+        output_fields=[
+            "text",
+            "manual_id",
+            "embedding",
+        ],  # Добавьте поля, которые нужны
     )
-    print("Конец метода search_in_milvus")
     # Возвращаем список Hit-объектов для нашего запроса.
     # results[0] — это список из top_n найденных элементов
-    return results[0]
+    hits = results[0]
+    manuals_score = []  # совпадение векторов
+    manual_ids = []  # Текстовая часть соответствующая вектору
+    manual_texts = []  # Название оригинального документа
+    manuals_embeddings = []  # Найденные схожие вектора
+
+    for hit_score in hits:
+        manual_score = 1 - hit_score.score
+        # print(manual_score)
+        if manual_score == 1.0:
+            manual_score = 100.0
+        else:
+            manual_score = round((manual_score), 2) * 100
+        manuals_score.append(manual_score)
+        # print("score:", manual_score)
+
+    for hit_id in hits:
+        manual_id = hit_id.entity.get("manual_id")
+        manual_ids.append(manual_id)
+        # print("manual_id:", manual_id)
+
+    for hit_text in hits:
+        manual_text = hit_text.entity.get("text")
+        manual_texts.append(manual_text)
+        # print("text:", manual_text)
+
+    for hit_embedding in hits:
+        manuals_embedding = hit_embedding.entity.get("embedding")
+        manuals_embeddings.append(manuals_embedding)
+        # print("embedding:", manuals_embedding)
+
+    for col, txt, score in zip(manual_ids, manual_texts, manuals_score):
+        print("Совпадение:", score)
+        print("Название мануала:", col)
+        print("Текстовый блок:", txt)
+
+    """for hit in hits:
+        print("score:", hit.score)
+        print("manual_id:", hit.entity.get("manual_id"))
+        print("text:", hit.entity.get("text"))
+        print("embedding:", hit.entity.get("embedding"))"""
+
+    return manual_ids, manual_texts, manuals_score
 
 
 def find_most_similar_with_collections(context, query_embedding, top_n=10):
@@ -437,11 +408,23 @@ def count_tokens(text):
 
 
 # Метод для записи вопроса пользователя в Google Таблицу
-def save_user_question_to_sheet(user_message, gpt_response, user_tag, log_filename):
+def save_user_question_to_sheet(
+    user_message, gpt_response, user_tag, log_filename, handle_message_method
+):
     next_row = len(sheet.get_all_values()) + 1  # Следующий номер строки
     sheet.update(
-        f"A{next_row}:F{next_row}",
-        [[next_row - 1, user_message, gpt_response, "", user_tag, log_filename]],
+        f"A{next_row}:G{next_row}",
+        [
+            [
+                next_row - 1,
+                user_message,
+                gpt_response,
+                "",
+                user_tag,
+                log_filename,
+                handle_message_method,
+            ]
+        ],
     )  # Запись номера теста, вопроса, ответа GPT, оценки (пусто), и тега пользователя
 
 
@@ -742,7 +725,9 @@ async def handle_message(update: Update, context):
             if image_text.split(" ")[0] in bot_reply:
                 images_to_send.append(ref)
 
-        save_user_question_to_sheet(user_message, bot_reply, user_tag, log_filename)
+        save_user_question_to_sheet(
+            user_message, bot_reply, user_tag, log_filename, "Режим Справочника"
+        )
 
         reply_keyboard = [["Хорошо"], ["Удовлетворительно"], ["Плохо"]]
         markup = ReplyKeyboardMarkup(
@@ -797,45 +782,52 @@ async def handle_message_manuals(update: Update, context):
     try:
 
         query_embedding = create_embedding_for_query(user_message)
+        # print(f"query_embedding - {query_embedding}")
 
         # Получаем релевантные тексты и коллекции
         """related_collections = find_most_similar_with_collections(
             context, query_embedding
         )"""
-        print("Точка 1")
-        related_collections = search_in_milvus(query_embedding)
-
-        print(f"Список релевантных мануалов: {related_collections}")
-
-        # Собираем описания коллекций
-        context_descriptions = []
-        for collection_name in related_collections:
-            description = get_collection_description(collection_name)
-            if description:
-                context_descriptions.append(
-                    f"Описание коллекции '{collection_name}': {description}"
-                )
-
-        # Сохраняем описания в переменную
-        context.user_data["context_descriptions"] = "\n".join(context_descriptions)
-
-        # Логируем для проверки
-        logger.info(
-            f"Контекст описаний коллекций:\n{context.user_data['context_descriptions']}"
+        # print("Точка 1")
+        related_collections, related_texts, related_score = search_in_milvus(
+            query_embedding
         )
 
-        # Проверяем, есть ли собранные описания коллекций
-        if context_descriptions:
-            # Формируем текст из описаний коллекций
-            descriptions_text = "\n\n".join(context_descriptions)
-            await update.message.reply_text(
-                f"Найденные описания коллекций с релевантными данными:\n\n{descriptions_text}"
+        # print(f"Список релевантных мануалов:")
+
+        responce = f"Найдены документы, схожие по отрывкам\n"
+        count_finds = 1
+        for col, txt, score in zip(related_collections, related_texts, related_score):
+            responce += (
+                f"{count_finds}) Релевантный документ - {col}\n"  # Название коллекции
             )
-        else:
-            # Если описаний нет, отправляем сообщение
-            await update.message.reply_text(
-                "Релевантные описания коллекций не найдены."
-            )
+            responce += f"Релевантный текст - {txt}\n"  # Текст
+            responce += f"Векторное совпадение - {score}%\n\n"  # Текст
+            count_finds += 1
+        await send_large_message(update, responce)
+
+        # Сохраняем контекст в лог-файл
+        log_filename = save_context_to_log(user_tag, responce)
+        # Логирование файла для отладки (опционально)
+        logger.info(
+            f"Контекст для пользователя {user_tag} сохранен в файл: {log_filename}"
+        )
+
+        # Логируется в табличку
+        save_user_question_to_sheet(
+            user_message, responce, user_tag, log_filename, "Рижим Мануалов"
+        )
+        # await update.message.reply_text(responce)
+        """for col in related_collections:
+            responce += col + "\n"
+            # await update.message.reply_text(col)
+
+        for text in related_texts:
+            responce += "Релевантный текст - " + text + "\n"
+            # await update.message.reply_text(col)
+        await update.message.reply_text(responce)
+
+        additional_table_mentions = find_table_mentions(responce)"""
 
     except Exception as e:
         logger.error(f"Ошибка обработки сообщения в режиме мануалов: {e}")
@@ -1070,7 +1062,7 @@ def clear_message_bot():
         logger.info(f"Ошибка API Telegram: {response.status_code}, {response.text}")
 
 
-# Обработка выбора базы данных через callback кнопки в ТГ Боте
+"""# Обработка выбора базы данных через callback кнопки в ТГ Боте
 async def select_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("Запустился метод select_db")
     query = update.callback_query
@@ -1126,7 +1118,7 @@ async def select_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
             password=MILVUS_PASSWORD,
         )
     await context
-    # Загружаем коллекции при втором режиме работы
+    # Загружаем коллекции при втором режиме работы"""
 
 
 # Метод для получения описания (description) коллекции Milvus
