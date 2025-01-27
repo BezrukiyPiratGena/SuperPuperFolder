@@ -4,7 +4,13 @@ import os
 import numpy as np
 import gspread  # Библиотека для работы с Google Sheets
 from google.oauth2.service_account import Credentials
-from telegram import InlineKeyboardMarkup, Update, ReplyKeyboardMarkup, BotCommand
+from telegram import (
+    InlineKeyboardMarkup,
+    Update,
+    ReplyKeyboardMarkup,
+    BotCommand,
+    ReplyKeyboardRemove,
+)
 from telegram._inline.inlinekeyboardbutton import InlineKeyboardButton
 from telegram.ext import (
     ApplicationBuilder,
@@ -776,6 +782,7 @@ async def handle_message_manuals(update: Update, context):
         logger.error("handle_message_manuals вызван вне режима мануалов.")
         return
 
+    user_id = update.message.from_user.id
     user_message = update.message.text
     user_tag = update.message.from_user.username or update.message.from_user.full_name
     # print("Точка1")
@@ -806,6 +813,12 @@ async def handle_message_manuals(update: Update, context):
             count_finds += 1
         await send_large_message(update, responce)
 
+        reply_keyboard = [["Хорошо"], ["Удовлетворительно"], ["Плохо"]]
+        markup = ReplyKeyboardMarkup(
+            reply_keyboard, one_time_keyboard=True, resize_keyboard=True
+        )
+        await update.message.reply_text("Оцените качество ответа:", reply_markup=markup)
+
         # Сохраняем контекст в лог-файл
         log_filename = save_context_to_log(user_tag, responce)
         # Логирование файла для отладки (опционально)
@@ -818,6 +831,7 @@ async def handle_message_manuals(update: Update, context):
             user_message, responce, user_tag, log_filename, "Рижим Мануалов"
         )
         # await update.message.reply_text(responce)
+
         """for col in related_collections:
             responce += col + "\n"
             # await update.message.reply_text(col)
@@ -1026,7 +1040,9 @@ async def handle_feedback(update: Update, context):
     quality_score = update.message.text  # Получение оценки пользователя
     next_row = len(sheet.get_all_values())  # Нахождение строки для записи оценки
     sheet.update(f"D{next_row}", [[quality_score]])  # Запись оценки в 4-й столбик
-    await update.message.reply_text("Спасибо за вашу оценку!")
+    await update.message.reply_text(
+        "Спасибо за вашу оценку!", reply_markup=ReplyKeyboardRemove()
+    )
 
 
 # Метод отчищает сообщения, полученные в момент отключения
@@ -1195,13 +1211,21 @@ def main():
     application.add_handler(
         CallbackQueryHandler(handle_callback_metod)
     )  # оббработка нажатия кнопок по выбору режма работы Бота
-    # application.add_handler(CallbackQueryHandler(select_db))  # Обработка кнопок
+
     application.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.Regex("^(Хорошо|Удовлетворительно|Плохо)$"),
             handle_message,
         )
     )
+
+    application.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.Regex("^(Хорошо|Удовлетворительно|Плохо)$"),
+            handle_message_manuals,
+        )
+    )
+    # Метот обработки после нажатия кнопки оценки ответа
     application.add_handler(
         MessageHandler(
             filters.Regex("^(Хорошо|Удовлетворительно|Плохо)$"),
