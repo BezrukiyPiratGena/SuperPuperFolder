@@ -546,6 +546,14 @@ async def handle_message(update: Update, context):
         return
 
     user_id = update.message.from_user.id
+
+    # Проверяем, ждет ли бот оценку
+    if context.user_data.get("awaiting_feedback", False):
+        await update.message.reply_text(
+            "⚠️ Сначала оцените предыдущий ответ, прежде чем задать новый вопрос!"
+        )
+        return  # Блокируем новый вопрос
+
     user_message = update.message.text
     user_tag = update.message.from_user.username or update.message.from_user.full_name
     # logger.info("")
@@ -781,6 +789,14 @@ async def handle_message_manuals(update: Update, context):
         return
 
     user_id = update.message.from_user.id
+
+    # Проверяем, ждет ли бот оценку
+    if context.user_data.get("awaiting_feedback", False):
+        await update.message.reply_text(
+            "⚠️ Сначала оцените предыдущий ответ, прежде чем задать новый вопрос!"
+        )
+        return  # Блокируем новый вопрос
+
     user_message = update.message.text
     user_tag = update.message.from_user.username or update.message.from_user.full_name
     # print("Точка1")
@@ -1171,8 +1187,10 @@ async def request_feedback(update, context):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
-        "Выберите оценку ответа:", reply_markup=reply_markup
+        "📢 Пожалуйста, оцените ответ перед тем, как задать новый вопрос:",
+        reply_markup=reply_markup,
     )
+    context.user_data["awaiting_feedback"] = True  # Блокируем следующий вопрос
 
 
 async def handle_all_callbacks(update: Update, context):
@@ -1201,6 +1219,9 @@ async def handle_feedback_callback(update: Update, context):
         "feedback_bad": "Плохо 🔴",
     }
     feedback_text = feedback_map.get(query.data, "Неизвестная оценка")
+
+    # Разрешаем пользователю задавать новый вопрос
+    context.user_data["awaiting_feedback"] = False  # Снимаем блокировку
 
     # Получаем текст оценки
 
