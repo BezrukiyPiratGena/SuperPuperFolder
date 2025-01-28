@@ -373,10 +373,7 @@ def read_table_from_minio(table_reference):
 
 # Метод для обработки команды /start
 async def start(update: Update, context):
-
-    await update.message.reply_text(
-        firts_message_from_tg_bot, reply_markup=ReplyKeyboardRemove()
-    )
+    await update.message.reply_text(firts_message_from_tg_bot)
 
 
 # Метод для обработки команды /info
@@ -392,7 +389,7 @@ async def info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "2️⃣ Отправлять таблицы или рисунки из Справочника Инжнеров.\n"
         "Если ты готов, то выбери режим работы через команду ➡️/metod⬅️!"
     )
-    await update.message.reply_text(info_message, reply_markup=ReplyKeyboardRemove)
+    await update.message.reply_text(info_message)
 
 
 # Метод для обработки команды /metod
@@ -404,8 +401,25 @@ async def metod(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
-        "Выберите метод работы Бота:", reply_markup=reply_markup
+        "Вы выбрали метод работы Бота:", reply_markup=reply_markup
     )
+    # context.user_data["handle_message_method"] = handle_message
+
+
+# Метод для обработки команды /metod
+async def response_evalution(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("Хорошо🟢", callback_data="Хорошо")],
+        [
+            InlineKeyboardButton(
+                "Удовлетворительно🟡", callback_data="Удовлетворительно"
+            )
+        ],
+        [InlineKeyboardButton("Плохо🔴", callback_data="Плохо")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text("Вы выбрали оценку:", reply_markup=reply_markup)
     # context.user_data["handle_message_method"] = handle_message
 
 
@@ -728,7 +742,6 @@ async def handle_message(update: Update, context):
         logger.info(f"Отправка ответа пользователю {user_tag}: {formatted_reply}")
         await send_large_message(update, formatted_reply)
         await send_table_to_chat(update, tables_to_mention, formatted_reply)
-        await request_feedback(update, context)
 
         images_to_send = []
         for image_text, ref in images_to_mention:
@@ -739,6 +752,11 @@ async def handle_message(update: Update, context):
             user_message, bot_reply, user_tag, log_filename, "Режим Справочника"
         )
 
+        reply_keyboard = [["Хорошо"], ["Удовлетворительно"], ["Плохо"]]
+        markup = ReplyKeyboardMarkup(
+            reply_keyboard, one_time_keyboard=True, resize_keyboard=True
+        )
+        await update.message.reply_text("Оцените качество ответа:", reply_markup=markup)
         await asyncio.sleep(1)
     except Exception as e:
         logger.error(f"Произошла ошибка: {e}")
@@ -776,6 +794,7 @@ def normalize_mentions(gpt_response):
 # Метод для обработки сообщений в режиме мануалов
 async def handle_message_manuals(update: Update, context):
     # print("Заработал режим handle_message_manuals")
+    # print(context.user_data.get("selected_metod"))
     if context.user_data.get("selected_metod") != "manuals_engrs":
         logger.error("handle_message_manuals вызван вне режима мануалов.")
         return
@@ -810,7 +829,12 @@ async def handle_message_manuals(update: Update, context):
             responce += f"Векторное совпадение - {score}%\n\n"  # Текст
             count_finds += 1
         await send_large_message(update, responce)
-        await request_feedback(update, context)
+
+        reply_keyboard = [["Хорошо"], ["Удовлетворительно"], ["Плохо"]]
+        markup = ReplyKeyboardMarkup(
+            reply_keyboard, one_time_keyboard=True, resize_keyboard=True
+        )
+        await update.message.reply_text("Оцените качество ответа:", reply_markup=markup)
 
         # Сохраняем контекст в лог-файл
         log_filename = save_context_to_log(user_tag, responce)
@@ -1033,7 +1057,9 @@ async def handle_feedback(update: Update, context):
     quality_score = update.message.text  # Получение оценки пользователя
     next_row = len(sheet.get_all_values())  # Нахождение строки для записи оценки
     sheet.update(f"D{next_row}", [[quality_score]])  # Запись оценки в 4-й столбик
-    await update.message.reply_text(reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text(
+        "Спасибо за вашу оценку!", reply_markup=ReplyKeyboardRemove()
+    )
 
 
 # Метод отчищает сообщения, полученные в момент отключения
@@ -1069,78 +1095,6 @@ def clear_message_bot():
         logger.info(f"Ошибка API Telegram: {response.status_code}, {response.text}")
 
 
-"""# Обработка выбора базы данных через callback кнопки в ТГ Боте
-async def select_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("Запустился метод select_db")
-    query = update.callback_query
-    context.user_data["minio_folder_docs_name"] = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK
-    await query.answer()  # Подтверждаем получение запроса
-
-    # global minio_folder_docs_name  # Объявляем переменную глобальнойы
-    global milvus_collection_name  # Объявляем переменную глобальной
-
-    selected_db = query.data  # Получаем callback_data из нажатой кнопки
-    context.user_data["selected_db"] = selected_db  # Сохраняем выбор пользователя
-    # connect_to_milvus(selected_db)  # Подключаемся к выбранной базе данных
-    connections.disconnect(alias="default")  # Отключаемся от нынешней бд в Milvus
-
-    # Отправляем сообщение пользователю
-    if selected_db == "engs_bot":
-        await query.edit_message_text(f"Вы выбрали режим справочника: {selected_db}")
-        minio_folder_docs_name = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK  # Изменение папки для поиска таблиц\рисунков
-        # logger.info(minio_folder_docs_name)
-        milvus_collection_name = MILVUS_COLLECTION  # Изменение коллекции milvus
-        # logger.info(milvus_collection_name)
-        context.user_data["minio_folder_docs_name"] = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK
-        context.user_data["milvus_collection_name"] = MILVUS_COLLECTION
-        context.user_data["handle_message_method"] = handle_message
-        # Подключаемся к Milvus с справочником
-        connections.connect(
-            alias="default",
-            host=MILVUS_HOST,
-            port=MILVUS_PORT,
-            db_name=MILVUS_DB_NAME_FIRST,
-            user=MILVUS_USER,
-            password=MILVUS_PASSWORD,
-        )
-    else:
-        await query.edit_message_text(
-            f"Вы выбрали режим поиска мануалов: {selected_db}"
-        )
-        minio_folder_docs_name = (
-            MINIO_FOLDER_DOCS_NAME_MANUAL  # Изменение папки для поиска таблиц\рисунков
-        )
-        # logger.info(minio_folder_docs_name)
-        milvus_collection_name = MILVUS_COLLECTION  # Изменение коллекции milvus
-        # logger.info(milvus_collection_name)
-        context.user_data["minio_folder_docs_name"] = MINIO_FOLDER_DOCS_NAME_MANUAL
-        context.user_data["milvus_collection_name"] = MILVUS_COLLECTION
-        context.user_data["handle_message_method"] = handle_message_manuals
-        connections.connect(
-            alias="default",
-            host=MILVUS_HOST,
-            port=MILVUS_PORT,
-            db_name=MILVUS_DB_NAME_FIRST,
-            user=MILVUS_USER,
-            password=MILVUS_PASSWORD,
-        )
-    await context
-    # Загружаем коллекции при втором режиме работы"""
-
-
-# Метод для получения описания (description) коллекции Milvus
-def get_collection_description(collection_name):
-    # logger.error(f"Вызвался метод get_collection_description!!!")
-    try:
-        collection = Collection(name=collection_name)
-        return collection.description  # Возвращаем описание коллекции
-    except Exception as e:
-        logger.error(
-            f"Не удалось получить описание для коллекции '{collection_name}': {e}"
-        )
-        return None
-
-
 async def set_bot_commands(application):
     """
     Устанавливает меню команд для Telegram-бота.
@@ -1149,73 +1103,10 @@ async def set_bot_commands(application):
         BotCommand("start", "Запустить бота"),
         # BotCommand("help", "Получить помощь"),
         BotCommand("metod", "Выбрать режим работы бота"),
-        BotCommand("info", "Информация о боте"),
+        BotCommand("response_evalution", "Выберите оценку ответа"),
+        BotCommand("info", "Инфор   мация о боте"),
     ]
     await application.bot.set_my_commands(commands)
-
-
-async def request_feedback(update, context):
-    """
-    Метод предлагает пользователю выбрать оценку ответа с помощью Inline-кнопок.
-    """
-    keyboard = [
-        [InlineKeyboardButton("Хорошо 🟢", callback_data="feedback_good")],
-        [
-            InlineKeyboardButton(
-                "Удовлетворительно 🟡", callback_data="feedback_neutral"
-            )
-        ],
-        [InlineKeyboardButton("Плохо 🔴", callback_data="feedback_bad")],
-    ]
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await update.message.reply_text(
-        "Выберите оценку ответа:", reply_markup=reply_markup
-    )
-
-
-async def handle_all_callbacks(update: Update, context):
-    """Обрабатывает все CallbackQuery и перенаправляет в нужный обработчик."""
-    query = update.callback_query
-    await query.answer()  # Подтверждаем получение нажатия
-
-    # Определяем, какая кнопка была нажата
-    if query.data in ["engs_bot", "manuals_engrs"]:
-        await handle_callback_metod(update, context)  # Вызов выбора режима
-    elif query.data.startswith("feedback_"):
-        await handle_feedback_callback(update, context)  # Вызов обработки оценки
-    else:
-        logger.warning(f"Неизвестный callback_data: {query.data}")
-
-
-async def handle_feedback_callback(update: Update, context):
-    print("вызван метод handle_feedback_callback")
-    """Обрабатывает нажатие на кнопки оценки ответа."""
-    query = update.callback_query
-    await query.answer()  # Подтверждаем нажатие
-
-    feedback_map = {
-        "feedback_good": "Хорошо 🟢",
-        "feedback_neutral": "Удовлетворительно 🟡",
-        "feedback_bad": "Плохо 🔴",
-    }
-    feedback_text = feedback_map.get(query.data, "Неизвестная оценка")
-
-    # Получаем текст оценки
-
-    user_tag = query.from_user.username or query.from_user.full_name
-
-    # Сохраняем оценку в Google Sheets (если требуется)
-    try:
-        next_row = len(sheet.get_all_values())  # Определяем строку для записи
-        sheet.update(f"D{next_row}", [[feedback_text]])  # Запись в столбец "D"
-        logger.info(f"Пользователь {user_tag} оценил ответ: {feedback_text}")
-    except Exception as e:
-        logger.error(f"Ошибка записи оценки в Google Sheets: {e}")
-
-    # Подтверждаем пользователю выбор
-    await query.edit_message_text(f"Вы выбрали оценку: {feedback_text}")
 
 
 # Метод обработки ошибки асинхронной менюшки /comands
@@ -1249,10 +1140,6 @@ async def handle_callback_metod(update: Update, context: ContextTypes.DEFAULT_TY
         context.user_data["handle_message_method"] = handle_message_manuals
         context.user_data["selected_metod"] = "manuals_engrs"
 
-    # print("Точка 0")
-    # print(f'handle_message_method - {context.user_data["handle_message_method"]}')
-    # print(f'selected_metod - {context.user_data["selected_metod"]}')
-
 
 # Основная функция для запуска бота
 def main():
@@ -1264,16 +1151,29 @@ def main():
     application.add_handler(CommandHandler("info", info))  # Обработка команды /info
     application.add_handler(CommandHandler("metod", metod))  # Обработка команды /metod
     application.add_handler(
-        CallbackQueryHandler(handle_all_callbacks)
+        CallbackQueryHandler(handle_callback_metod)
     )  # оббработка нажатия кнопок по выбору режма работы Бота
 
-    application.add_handler(MessageHandler(filters.TEXT, handle_message))
+    application.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.Regex("^(Хорошо|Удовлетворительно|Плохо)$"),
+            handle_message,
+        )
+    )
 
-    application.add_handler(MessageHandler(filters.TEXT, handle_message_manuals))
-
+    application.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.Regex("^(Хорошо|Удовлетворительно|Плохо)$"),
+            handle_message_manuals,
+        )
+    )
     # Метот обработки после нажатия кнопки оценки ответа
-    application.add_handler(MessageHandler(filters.TEXT, handle_feedback))
-
+    application.add_handler(
+        MessageHandler(
+            filters.Regex("^(Хорошо|Удовлетворительно|Плохо)$"),
+            handle_feedback,
+        )
+    )
     logger.info("Бот запущен.")
     clear_message_bot()
     application.run_polling()

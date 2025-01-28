@@ -27,6 +27,8 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import ProcessPoolExecutor
 from threading import Lock
 import shutil
+import chardet  # Для автоматического определения кодировки
+
 
 # Загрузка переменных среды
 load_dotenv("all_tockens.env")
@@ -192,6 +194,22 @@ def extract_content_from_pdf(pdf_path):
 
     for page_num, page in enumerate(doc, start=1):
         raw_text = page.get_text("text")  # Извлекаем текст страницы
+
+        # ✅ Определяем кодировку текста
+        detected_encoding = chardet.detect(raw_text.encode())
+        encoding = (
+            detected_encoding["encoding"] if detected_encoding["encoding"] else "utf-8"
+        )
+
+        try:
+            # ✅ Принудительно конвертируем в UTF-8
+            fixed_text = raw_text.encode(encoding, errors="ignore").decode(
+                "utf-8", errors="ignore"
+            )
+        except UnicodeDecodeError:
+            print(f"⚠ Ошибка кодировки в файле {pdf_path} (страница {page_num})")
+            continue
+
         fixed_text = fix_text_paragraphs(raw_text)  # Применяем исправление
         all_text += fixed_text + "\n"  # Добавляем текст страницы
         blocks = page.get_text("blocks")  # Для обработки блоков текста
