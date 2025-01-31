@@ -281,26 +281,35 @@ def create_embeddings(
 
 def split_text_logically(text):
     """
-    Разделяет текст на логические блоки по 500 символов, соблюдая границы абзацев.
+    Разделяет текст на логические блоки по 150 символов, соблюдая границы предложений,
+    при этом перед добавлением следующей части проверяет, не превышает ли блок 100 символов.
     """
-    paragraphs = text.split("\n")  # Разделяем текст на абзацы
+    sentences = re.split(
+        r"(?<=[.!?])\s+", text.strip()
+    )  # Разделяем текст по предложениям
     logical_blocks = []  # Список для хранения логических блоков
     current_block = ""  # Текущий блок текста
+    max_length = 150  # Максимальная длина блока
+    safe_limit = 100  # Лимит, после которого начинается проверка
 
-    for paragraph in paragraphs:
-        paragraph = paragraph.strip()  # Убираем лишние пробелы
-        if not paragraph:
-            continue  # Пропускаем пустые абзацы
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue  # Пропускаем пустые строки
 
-        # Если добавление текущего абзаца не превышает 500 символов, добавляем его
-        if (
-            len(current_block) + len(paragraph) + 1 <= 1000
-        ):  # +1 для пробела/разделителя
-            current_block += paragraph + " "
+        # Если предложение длиннее max_length, разрезаем его
+        while len(sentence) > max_length:
+            logical_blocks.append(sentence[:max_length])  # Сохраняем часть предложения
+            sentence = sentence[max_length:]  # Оставшуюся часть снова проверяем
+
+        # Проверяем, не превысит ли добавление нового предложения safe_limit
+        if len(current_block) + len(sentence) + 1 <= safe_limit:
+            current_block += sentence + " "
         else:
-            # Если текущий блок превышает 500 символов, сохраняем его и начинаем новый
-            logical_blocks.append(current_block.strip())
-            current_block = paragraph + " "
+            logical_blocks.append(
+                current_block.strip()
+            )  # Добавляем текущий блок в список
+            current_block = sentence + " "  # Начинаем новый блок
 
     # Добавляем последний блок, если он не пустой
     if current_block.strip():
@@ -384,7 +393,7 @@ def process_docx_file(docx_file, s3_client, path_to_save_manuals):
 
     # Уникальное имя коллекции
 
-    milvus_collection = "ManualsPDF4"
+    milvus_collection = "ManualsPDF5"
 
     # Загрузка файла в MinIO
 

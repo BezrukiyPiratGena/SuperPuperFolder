@@ -1,4 +1,5 @@
 import logging
+import time
 import openai
 import os
 import numpy as np
@@ -141,7 +142,6 @@ connections.connect(
     password=MILVUS_PASSWORD,
 )
 
-
 # Получаем список всех коллекций в базе данных
 all_collections = utility.list_collections()  # <======== Загрузка всех коллекций
 
@@ -186,6 +186,45 @@ logger.info(f"| Коллекция справочника загружена |")
 logger.info(f"-----------------------------------")
 
 
+def check_openai_access(retry_delay=5):
+    """
+    Проверяет доступ к OpenAI, отправляя тестовый запрос.
+    Если доступа нет, пробует несколько раз.
+    """
+
+    try:
+        # Отправляем тестовый запрос (Embedding)
+        response = openai.embeddings.create(
+            input=["Проверка доступа к OpenAI"], model="text-embedding-ada-002"
+        )
+
+        if response:
+            logger.info("✅ Доступ к OpenAI подтверждён!")
+            return True
+
+    except openai.AuthenticationError:
+        logger.info("❌ Ошибка: Неверный API-ключ OpenAI.")
+        return False
+
+    except openai.RateLimitError:
+        logger.info("⏳ Доступ к OpenAI ограничен, попробуем позже...")
+        time.sleep(retry_delay)
+
+    except openai.OpenAIError as e:
+        logger.info(f"⚠ Ошибка API OpenAI: {e}")
+        time.sleep(retry_delay)
+
+    except Exception as e:
+        logger.info(f"🚨 Неизвестная ошибка при доступе к OpenAI: {e}")
+        time.sleep(retry_delay)
+
+    return False
+
+
+# Запускаем проверку
+check_openai_access()
+
+
 # Метод для создания эмбеддинга запроса пользователя
 def create_embedding_for_query(query):
     try:
@@ -216,7 +255,7 @@ def find_most_similar(query_embedding, top_n=15):
     )
 
 
-def search_in_milvus(query_embedding, top_n=2):
+def search_in_milvus(query_embedding, top_n=10):
     """
     Ищет вектор query_embedding в указанной коллекции Milvus (collection_name),
     возвращая top_n наиболее похожих результатов.
@@ -374,6 +413,11 @@ def read_table_from_minio(table_reference):
 # Метод для обработки команды /start
 async def start(update: Update, context):
 
+    user_id = update.message.from_user.id
+    last_selected_mode = load_user_mode_from_sheet(user_id)
+    if last_selected_mode:
+        context.user_data["selected_method"] = last_selected_mode
+
     await update.message.reply_text(
         firts_message_from_tg_bot, reply_markup=ReplyKeyboardRemove()
     )
@@ -406,7 +450,6 @@ async def metod(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Выберите метод работы Бота:", reply_markup=reply_markup
     )
-    # context.user_data["handle_message_method"] = handle_message
 
 
 # Метод подсчитывает токены для конкретного отрывка текста
@@ -532,16 +575,21 @@ def search_by_reference_in_milvus(reference_value):
 
 # Самый главный метод, обработки, получения, отправления сообщений
 async def handle_message(update: Update, context):
-
+    user_id = update.message.from_user.id
+    last_selected_mode = load_user_mode_from_sheet(user_id)
+    # print("last_selected_mode", last_selected_mode)
+    if last_selected_mode:
+        context.user_data["last_selected_mode"] = last_selected_mode
     # Динамический вызов нужного метода обработки
+
     handle_message_method = context.user_data.get(
-        "handle_message_method",  # Если метод сохранён, используем его
+        "last_selected_mode",  # Если метод сохранён, используем его
         handle_message,  # По умолчанию - текущий метод
     )
-    print(f"handle_message_method - {handle_message_method}")
+    # print(f"handle_message_method - {handle_message_method}")
 
     # Если метод другой (например, handle_message_manuals), вызываем его
-    if handle_message_method != handle_message:
+    if handle_message_method != "engs_bot":
         await handle_message_manuals(update, context)
         return
 
@@ -784,7 +832,7 @@ def normalize_mentions(gpt_response):
 # Метод для обработки сообщений в режиме мануалов
 async def handle_message_manuals(update: Update, context):
     # print("Заработал режим handle_message_manuals")
-    if context.user_data.get("selected_metod") != "manuals_engrs":
+    if context.user_data.get("last_selected_mode") != "manuals_engrs":
         logger.error("handle_message_manuals вызван вне режима мануалов.")
         return
 
@@ -958,7 +1006,8 @@ async def send_large_message(update, text, max_length=4000):
                 for i in range(0, len(paragraph), max_length)
             ]
             for sub_paragraph in sub_paragraphs:
-                await update.message.reply_text(sub_paragraph, parse_mode="HTML")
+                await update.message.reply_text(sub_paragraph)
+                # await update.message.reply_text(sub_paragraph, parse_mode="HTML")
             continue  # Переходим к следующему абзацу после отправки разбиения
 
         # Проверяем, можно ли добавить текущий абзац в сообщение
@@ -970,12 +1019,14 @@ async def send_large_message(update, text, max_length=4000):
                 current_message = paragraph
         else:
             # Если текущее сообщение заполнено, отправляем его и начинаем новое
-            await update.message.reply_text(current_message, parse_mode="HTML")
+            await update.message.reply_text(current_message)
+            # await update.message.reply_text(current_message, parse_mode="HTML")
             current_message = paragraph  # Начинаем новое сообщение с текущего абзаца
 
     # Отправляем оставшуюся часть сообщения, если что-то осталось
     if current_message:
-        await update.message.reply_text(current_message, parse_mode="HTML")
+        await update.message.reply_text(current_message)
+        # await update.message.reply_text(current_message, parse_mode="HTML")
 
 
 # Метод дополнительного поиск упомянутых изображений в ответе GPT по Рисунок Х
@@ -1249,30 +1300,87 @@ def run_async_task(task):
     return loop.run_until_complete(task)
 
 
+def save_user_mode_to_sheet(user_id, mode):
+    """Сохраняет выбранный режим работы пользователя в 3-й лист Google Sheets."""
+    try:
+        worksheet = client.open_by_key(SPREADSHEET_ID).worksheet(
+            "Ласт выбранный метод пользователей"
+        )
+        all_data = worksheet.get_all_values()  # Получаем все строки
+
+        if not all_data:  # Если лист вообще пустой
+            worksheet.append_row(["Telegram ID", "Метод работы"])  # Добавляем заголовки
+
+        user_ids = [
+            row[0] for row in all_data[1:] if row
+        ]  # Получаем ID, пропуская заголовки
+
+        if str(user_id) in user_ids:
+            row_index = (
+                user_ids.index(str(user_id)) + 2
+            )  # Индекс в Google Sheets (начинается с 1)
+            worksheet.update(f"B{row_index}", [[mode]])  # Обновляем режим работы
+        else:
+            worksheet.append_row([str(user_id), mode])  # Добавляем новую запись
+
+        logger.info(f"Режим работы '{mode}' сохранен для пользователя {user_id}")
+
+    except Exception as e:
+        logger.error(f"Ошибка при сохранении режима работы в Google Sheets: {e}")
+
+
+def load_user_mode_from_sheet(user_id):
+    """Загружает последний выбранный режим работы пользователя из 3-го листа Google Sheets."""
+    try:
+        worksheet = client.open_by_key(SPREADSHEET_ID).worksheet(
+            "Ласт выбранный метод пользователей"
+        )
+        all_data = worksheet.get_all_values()
+
+        if (
+            not all_data or len(all_data) < 2
+        ):  # Проверка, есть ли данные (пропускаем заголовки)
+            return None
+
+        for row in all_data[1:]:  # Пропускаем заголовок
+            if len(row) >= 2 and row[0] == str(
+                user_id
+            ):  # Проверяем, есть ли вторая колонка
+                return row[1]  # Возвращаем метод работы
+
+        return None  # Если ID не найден
+    except Exception as e:
+        logger.error(f"Ошибка при загрузке режима работы из Google Sheets: {e}")
+        return None
+
+
 # метод для обработки нажатой кнопки при выбор режима работы Бота
 async def handle_callback_metod(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # logger.info("Запустился метод handle_callback_metod")
     query = update.callback_query
     await query.answer()  # Подтверждаем получение нажатия
 
+    user_id = query.from_user.id
+    selected_method = query.data  # Получаем, что выбрал пользователь
+
     # Проверяем, какую кнопку нажали
-    if query.data == "engs_bot":
+    if selected_method == "engs_bot":
         await query.edit_message_text(
             "Вы выбрали режим : Поиск по справочнику📔 \n\nМожете задать вопрос"
         )
         context.user_data["handle_message_method"] = handle_message
-        context.user_data["selected_metod"] = "engs_bot"
 
-    elif query.data == "manuals_engrs":
+    elif selected_method == "manuals_engrs":
         await query.edit_message_text(
             "Вы выбрали режим: Поиск мануалов📚 \n\nМожете задать вопрос"
         )
         context.user_data["handle_message_method"] = handle_message_manuals
-        context.user_data["selected_metod"] = "manuals_engrs"
 
-    # print("Точка 0")
-    # print(f'handle_message_method - {context.user_data["handle_message_method"]}')
-    # print(f'selected_metod - {context.user_data["selected_metod"]}')
+    # Сохраняем метод работы в память бота
+    context.user_data["selected_method"] = selected_method
+
+    # Сохраняем в Google Sheets (3-й лист)
+    save_user_mode_to_sheet(user_id, selected_method)
 
 
 # Основная функция для запуска бота
@@ -1305,6 +1413,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # loaded_collections = load_all_collections()
-    # print(f"Всего загружено {len(loaded_collections)} коллекций.")
     main()
