@@ -61,11 +61,11 @@ logging.basicConfig(
 
 # =======================================================================================================
 
-DOCX_DIRECTORY = (
-    r"C:\Project1\GITProjects\scripts\Шлюхи"  # <================= Путь к файлам docx
-)
+DOCX_DIRECTORY = r"C:\Users\CIR\Desktop\jopa\mANUalS\ready_all\1"  # <================= Путь к файлам docx
 
 end_name_docs = ".pdf"  # <============ Конец имени исходного файла, названия коллекции
+
+milvus_collection = "Manuals2"
 
 # =======================================================================================================
 
@@ -120,9 +120,6 @@ def process_content_from_pdf(
                 data = [
                     [embedding],
                     [block],
-                    [""],
-                    [""],
-                    [""],
                     [description_milvus_collection],
                 ]
                 collection.insert(data)
@@ -289,8 +286,8 @@ def split_text_logically(text):
     )  # Разделяем текст по предложениям
     logical_blocks = []  # Список для хранения логических блоков
     current_block = ""  # Текущий блок текста
-    max_length = 150  # Максимальная длина блока
-    safe_limit = 100  # Лимит, после которого начинается проверка
+    max_length = 100  # Максимальная длина блока
+    safe_limit = 70  # Лимит, после которого начинается проверка
 
     for sentence in sentences:
         sentence = sentence.strip()
@@ -393,7 +390,7 @@ def process_docx_file(docx_file, s3_client, path_to_save_manuals):
 
     # Уникальное имя коллекции
 
-    milvus_collection = "ManualsPDF5"
+    global milvus_collection
 
     # Загрузка файла в MinIO
 
@@ -402,9 +399,6 @@ def process_docx_file(docx_file, s3_client, path_to_save_manuals):
             FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
             FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=1536),
             FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
-            FieldSchema(name="reference", dtype=DataType.VARCHAR, max_length=65535),
-            FieldSchema(name="figure_id", dtype=DataType.VARCHAR, max_length=100),
-            FieldSchema(name="related_table", dtype=DataType.VARCHAR, max_length=65535),
             FieldSchema(name="manual_id", dtype=DataType.VARCHAR, max_length=256),
         ]
         schema = CollectionSchema(fields, description="Коллекция со всеми мануалами")
@@ -427,12 +421,16 @@ def process_docx_file(docx_file, s3_client, path_to_save_manuals):
     index_params = {
         "index_type": "IVF_FLAT",
         "metric_type": "L2",
-        "params": {"nlist": 128},
+        "params": {"nlist": 4096},
     }
-    collection.create_index(field_name="embedding", index_params=index_params)
+    # if not collection.has_index():
+    # print("⚙ Индекс отсутствует. Создаём...")
+    # collection.create_index(field_name="embedding", index_params=index_params)
+    # else:
+    #    print("✅ Индекс уже существует. Пропускаем создание.")
     collection.load()
     print(f"Конец загрузки коллекции в Milvus {description_milvus_collection}")
-    # move_file(description_milvus_collection, path_to_save_manuals)
+    move_file(description_milvus_collection, path_to_save_manuals)
 
     print(
         f"Индекс успешно создан и коллекция '{milvus_collection}''{description_milvus_collection}' загружена в БД '{change_db_of_milvus}'"
@@ -464,12 +462,25 @@ def main():
 
     # Передаем подключение в потоки
     with ThreadPoolExecutor(
-        max_workers=9
+        max_workers=12
     ) as executor:  # <============= max_workers - количество потоков
         executor.map(
             lambda docx_file: process_docx_file(docx_file, s3_client, DOCX_DIRECTORY),
             docx_files,
         )
+
+    print("🔹 Индекс отсутствует. Создаём...")
+    index_params = {
+        "index_type": "IVF_FLAT",
+        "metric_type": "L2",
+        "params": {"nlist": 4096},
+    }
+    milvus_collection = Collection(name="Manuals2")  # Загрузка коллекции
+
+    milvus_collection.create_index(field_name="embedding", index_params=index_params)
+
+    milvus_collection.load()
+    print("🎯 Коллекция загружена в память.")
 
 
 if __name__ == "__main__":

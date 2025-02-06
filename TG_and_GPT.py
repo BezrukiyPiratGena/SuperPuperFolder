@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 import logging
 import time
 import openai
@@ -100,6 +101,10 @@ minio_folder_docs_name = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK
 milvus_collection_name = MILVUS_COLLECTION
 # milvus_collection_name = MILVUS_COLLECTION_SPRAVOCHNIK
 
+# Создаем пул потоков (до 10 одновременно)
+executor = ThreadPoolExecutor(
+    max_workers=10
+)  #  <========================== Количество потоков
 
 # Устанавливаем ключ OpenAI API
 openai.api_key = OPENAI_API_KEY
@@ -226,7 +231,7 @@ check_openai_access()
 
 
 # Метод для создания эмбеддинга запроса пользователя
-def create_embedding_for_query(query):
+def create_embedding_for_query(query, update: Update):
     try:
         response = openai.embeddings.create(
             input=[query],
@@ -237,7 +242,10 @@ def create_embedding_for_query(query):
     # except openai.error.Timeout as e:
     #    print(f"Ошибка: Таймаут запроса - {e}")
     except Exception as e:
-        print(f"Ошибка: {e}")
+        logger.error(f"Ошибка: {e}")
+        update.message.reply_text(
+            f"Произошла ошибка при создании вектора вопроса: {str(e)}"
+        )
         return None
 
 
@@ -443,7 +451,7 @@ async def info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def metod(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("Поиск по справочнику", callback_data="engs_bot")],
-        [InlineKeyboardButton("Поиск мануалов", callback_data="manuals_engrs")],
+        # [InlineKeyboardButton("Поиск мануалов", callback_data="manuals_engrs")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -611,7 +619,7 @@ async def handle_message(update: Update, context):
     # Если сообщение не является запросом изображения, продолжаем стандартную обработку через GPT
     try:
 
-        query_embedding = create_embedding_for_query(user_message)
+        query_embedding = create_embedding_for_query(user_message, update)
         most_similar_texts, most_similar_refs, most_similar_related_tables = (
             find_most_similar(query_embedding)
         )
@@ -719,7 +727,8 @@ async def handle_message(update: Update, context):
                         ""
                         "Примечания к контексту:"
                         "Если в контексте будут таблицы, ты должен извлечь из них всю информацию (без вырезания информации), не сжимая ее и отправить эту таблицу в виде списка "
-                        'Если в контексте в таблицах узаканы рисунки, ты должен учитывать их все в ответе в формате "Рисункок X" '
+                        'Если в контексте в таблицах узаканы рисунки, ты должен всегда упоминать их все в ответе в формате "Рисункок X" '
+                        "Всегда указывай в ответе упомянутые Рисунки (не в конце ответа, а во всем тексте ответа)"
                         # "Если ты упоминаешь рисунки, то упоминай их в формате Рисунок Х."
                         # "Если ты упоминаешь таблицы, то упоминай их в формате ТаблицЕ Х"
                         # "Если ты упоминаешь таблицы, то не склоняй Таблицы\Таблиц\Таблице Х и т.д. Всегда пиши ТаблиЦА Х"
@@ -732,9 +741,11 @@ async def handle_message(update: Update, context):
                         "Если нет релевантных изображений/таблиц - Не пиши что 'релевантные изображения/таблицы:отсутствуют' или 'Таблицы, на которых основан ответ:- отсутствуют' если нет таких, то вообще ничего не пиши"
                         "Если тебе запрещено что-то или ты не можешь предоставить, не говори это пользователю"
                         "Не указывай текстовые боки в ответе"
+                        "Если в контексте были упомянуты рисунки, то упоминай их так же в своем ответе "
                         ""
                         "Если пользователь запрашивает таблицу (например, 'Таблица Х' или 'Таблица Х полностью' или 'Что находится в Таблице Х', 'Что в Таблице Х')"
                         "ты должен сообщить, что Таблица Х (название) есть в БД, без вывода содержимого таблицы. не говори, что ты не можешь предоставить ее содержимое"
+                        "Не отвеча 'Не могу ответить на вопрос, так как данных недостаточно', вместо этого отвечай, что 'Информации не найдено в справочнике'"
                     ),
                 },
                 {
@@ -745,7 +756,7 @@ async def handle_message(update: Update, context):
                 {"role": "user", "content": user_message},
             ],
             temperature=0.3,
-            timeout=10,
+            timeout=30,
         )
         # logger.info(f"response ответа {response}")
 
@@ -797,14 +808,27 @@ async def handle_message(update: Update, context):
 
         await asyncio.sleep(1)
     except Exception as e:
+        error_message = str(e)
         logger.error(f"Произошла ошибка: {e}")
-        await update.message.reply_text(
-            f"Произошла ошибка при получении ответа: {str(e)}"
-        )
+        # 1️⃣ Проверяем, произошла ли ошибка с несовпадающими размерностями (ошибка в создании вектора вопроса)
+        if "shapes" in error_message and "not aligned" in error_message:
+            await update.message.reply_text(
+                "⚠️ Ошибка при векторизации вопроса!\n"
+                "Пожалуйста, сообщите администратору."
+            )
 
-        await update.message.reply_text(
-            f"Произошла ошибка при получении ответа: {str(e)}"
-        )
+        # 2️⃣ Проверяем, является ли ошибка 403 (регион не поддерживается) (VPN ЛЁГ)
+        elif "unsupported_country_region_territory" in error_message:
+            await update.message.reply_text(
+                "⚠️ Ошибка с доступом к OpenAI API для вашего региона.\n"
+                "Пожалуйста, сообщите администратору."
+            )
+
+        # 3️⃣ Если ошибка другая — обычный вывод
+        else:
+            await update.message.reply_text(
+                f"❌ Произошла ошибка при получении ответа:\n{error_message}"
+            )
 
 
 # Метод для преобразования склонений упомянутых таблиц и рисунков
@@ -814,14 +838,19 @@ def normalize_mentions(gpt_response):
     """
     # print(f"gpt ответ до исправлений: {gpt_response}")
     # Шаблон для склонений "Рисунок" перед числами
-    pattern_risunok = r"Рисунк[аеуов]{1}(?=\s*\d+)"
+    pattern_risunok = r"[Рр]исунк[аеуов]{1}(?=\s*\d+)"
     # Шаблон для склонений "Таблица" перед числами
-    pattern_tablitsa = r"Таблиц[аеуовы]{1}(?=\s*\d+)"
+    pattern_tablitsa = r"[Тт]аблиц[аеуовы]{1}(?=\s*\d+)"
+
+    pattern_risunok2 = r"[Рр]исунок{1}(?=\s*\d+)"
+    pattern_tablitsa2 = r"[Тт]аблица{1}(?=\s*\d+)"
 
     # Заменяем склонения "Рисунок" на базовую форму
     gpt_response = re.sub(pattern_risunok, "Рисунок", gpt_response)
+    gpt_response = re.sub(pattern_risunok2, "Рисунок", gpt_response)
     # Заменяем склонения "Таблица" на базовую форму
     gpt_response = re.sub(pattern_tablitsa, "Таблица", gpt_response)
+    gpt_response = re.sub(pattern_tablitsa2, "Таблица", gpt_response)
 
     # Логируем результат
     # print(f"gpt ответ после исправлений: {gpt_response}")
@@ -850,7 +879,7 @@ async def handle_message_manuals(update: Update, context):
     # print("Точка1")
     try:
 
-        query_embedding = create_embedding_for_query(user_message)
+        query_embedding = create_embedding_for_query(user_message, update)
         # print(f"query_embedding - {query_embedding}")
 
         # Получаем релевантные тексты и коллекции
@@ -873,7 +902,7 @@ async def handle_message_manuals(update: Update, context):
             responce += f"Релевантный текст - {txt}\n"  # Текст
             responce += f"Векторное совпадение - {score}%\n\n"  # Текст
             count_finds += 1
-        await send_large_message(update, responce)
+        await send_large_message_for_manuals(update, responce)
         await request_feedback(update, context)
 
         # Сохраняем контекст в лог-файл
@@ -993,6 +1022,43 @@ async def send_table_to_chat(update, tables_to_mention, formatted_reply):
 
 # Метод, разделяющий сообщения от ТГ Бота по 4000 символов с лог заглючением по абзацам
 async def send_large_message(update, text, max_length=4000):
+    # Разбиваем текст по абзацам
+    paragraphs = text.split("\n\n")
+    current_message = ""
+
+    for paragraph in paragraphs:
+        # Проверяем, если текущий абзац слишком длинный, чтобы отправить его как есть
+        if len(paragraph) > max_length:
+            # Если абзац превышает max_length, разбиваем его на подчасти
+            sub_paragraphs = [
+                paragraph[i : i + max_length]
+                for i in range(0, len(paragraph), max_length)
+            ]
+            for sub_paragraph in sub_paragraphs:
+                # await update.message.reply_text(sub_paragraph)
+                await update.message.reply_text(sub_paragraph, parse_mode="HTML")
+            continue  # Переходим к следующему абзацу после отправки разбиения
+
+        # Проверяем, можно ли добавить текущий абзац в сообщение
+        if len(current_message) + len(paragraph) + 2 <= max_length:
+            # Добавляем абзац в текущее сообщение
+            if current_message:
+                current_message += "\n\n" + paragraph
+            else:
+                current_message = paragraph
+        else:
+            # Если текущее сообщение заполнено, отправляем его и начинаем новое
+            # await update.message.reply_text(current_message)
+            await update.message.reply_text(current_message, parse_mode="HTML")
+            current_message = paragraph  # Начинаем новое сообщение с текущего абзаца
+
+    # Отправляем оставшуюся часть сообщения, если что-то осталось
+    if current_message:
+        # await update.message.reply_text(current_message)
+        await update.message.reply_text(current_message, parse_mode="HTML")
+
+
+async def send_large_message_for_manuals(update, text, max_length=4000):
     # Разбиваем текст по абзацам
     paragraphs = text.split("\n\n")
     current_message = ""
@@ -1358,7 +1424,7 @@ def load_user_mode_from_sheet(user_id):
 async def handle_callback_metod(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # logger.info("Запустился метод handle_callback_metod")
     query = update.callback_query
-    await query.answer()  # Подтверждаем получение нажатия
+    query.answer()  # Подтверждаем получение нажатия
 
     user_id = query.from_user.id
     selected_method = query.data  # Получаем, что выбрал пользователь
@@ -1383,6 +1449,10 @@ async def handle_callback_metod(update: Update, context: ContextTypes.DEFAULT_TY
     save_user_mode_to_sheet(user_id, selected_method)
 
 
+async def handle_message_async(update: Update, context):
+    asyncio.create_task(handle_message(update, context))  # Запускаем как задачу
+
+
 # Основная функция для запуска бота
 def main():
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
@@ -1398,7 +1468,7 @@ def main():
 
     application.add_handler(MessageHandler(filters.TEXT, handle_message))
 
-    application.add_handler(MessageHandler(filters.TEXT, handle_message_manuals))
+    # application.add_handler(MessageHandler(filters.TEXT, handle_message_manuals))
 
     # Метот обработки после нажатия кнопки оценки ответа
     application.add_handler(MessageHandler(filters.TEXT, handle_feedback))
