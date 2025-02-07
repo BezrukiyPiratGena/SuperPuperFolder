@@ -253,14 +253,31 @@ def create_embedding_for_query(query, update: Update):
 def find_most_similar(query_embedding, top_n=15):
     query_embedding_np = np.array([query_embedding], dtype=np.float32)
     similarities = np.dot(all_embeddings, query_embedding_np.T)
-    most_similar_indices = np.argsort(similarities, axis=0)[::-1][:top_n]
-    return (
-        [all_texts[i] for i in most_similar_indices.flatten()],
-        [all_table_references[i] for i in most_similar_indices.flatten()],
-        [
-            all_related_tables[i] for i in most_similar_indices.flatten()
-        ],  # Добавляем related_table
-    )
+    most_similar_indices = np.argsort(similarities, axis=0)[::-1].flatten()
+
+    unique_related_tables = set()  # Храним уже добавленные related_table
+    filtered_texts = []
+    filtered_refs = []
+    filtered_related_tables = []
+
+    for i in most_similar_indices:
+        related_table = all_related_tables[i]  # Получаем связанный related_table
+
+        # Если related_table уже встречался — пропускаем
+        if related_table in unique_related_tables:
+            continue
+
+        # Добавляем уникальный related_table в результат
+        unique_related_tables.add(related_table)
+        filtered_texts.append(all_texts[i])
+        filtered_refs.append(all_table_references[i])
+        filtered_related_tables.append(related_table)
+
+        # Если уже набрали нужное количество top_n, выходим
+        if len(filtered_texts) >= top_n:
+            break
+
+    return filtered_texts, filtered_refs, filtered_related_tables
 
 
 def search_in_milvus(query_embedding, top_n=10):
@@ -610,7 +627,8 @@ async def handle_message(update: Update, context):
         )
         return  # Блокируем новый вопрос
 
-    user_message = update.message.text
+    user_message1 = update.message.text
+    user_message = replace_standart(user_message1)
     user_tag = update.message.from_user.username or update.message.from_user.full_name
     # logger.info("")
     logger.info(f"Получено сообщение от {user_tag}: {user_message}")
@@ -732,6 +750,7 @@ async def handle_message(update: Update, context):
                         # "Если ты упоминаешь рисунки, то упоминай их в формате Рисунок Х."
                         # "Если ты упоминаешь таблицы, то упоминай их в формате ТаблицЕ Х"
                         # "Если ты упоминаешь таблицы, то не склоняй Таблицы\Таблиц\Таблице Х и т.д. Всегда пиши ТаблиЦА Х"
+                        "Никогдда не отвечай в виде таблицы, вместо этого отвечай в виде списка"
                         ""
                         ""
                         "Как отвечать:"
@@ -746,6 +765,9 @@ async def handle_message(update: Update, context):
                         "Если пользователь запрашивает таблицу (например, 'Таблица Х' или 'Таблица Х полностью' или 'Что находится в Таблице Х', 'Что в Таблице Х')"
                         "ты должен сообщить, что Таблица Х (название) есть в БД, без вывода содержимого таблицы. не говори, что ты не можешь предоставить ее содержимое"
                         "Не отвеча 'Не могу ответить на вопрос, так как данных недостаточно', вместо этого отвечай, что 'Информации не найдено в справочнике'"
+                        ""
+                        "Если в названии какого-то оборудования есть слова: 'Standard, Standart, Std, STANDARD, STANDART' - это все одно и то же оборудование"
+                        "Если встречаешь название модели, которое может быть переведено с русского на английский (или наоборот), старайся определить наиболее точное соответствие."
                     ),
                 },
                 {
@@ -829,6 +851,20 @@ async def handle_message(update: Update, context):
             await update.message.reply_text(
                 f"❌ Произошла ошибка при получении ответа:\n{error_message}"
             )
+
+
+def replace_standart(text):
+    """
+    Заменяет все варианты слова 'Standart' (Standart, STANDART, standart) на 'Standard'.
+
+    Аргументы:
+        text (str): Входной текст.
+
+    Возвращает:
+        str: Текст с заменёнными словами.
+    """
+    print("запустился метод replace_standart")
+    return re.sub(r"\b[Ss][Tt][Aa][Nn][Dd][Aa][Rr][DdTt]\b", "Standard", text)
 
 
 # Метод для преобразования склонений упомянутых таблиц и рисунков
