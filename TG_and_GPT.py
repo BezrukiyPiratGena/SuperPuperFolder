@@ -423,7 +423,7 @@ def read_table_from_minio(table_reference):
         # Преобразуем содержимое таблицы в строковый формат
         table_content = ""
         for row in sheet.iter_rows(values_only=True):
-            row_content = "\t".join(map(str, row))  # Преобразуем каждую строку
+            row_content = " | ".join(map(str, row))  # Преобразуем каждую строку
             table_content += row_content + "\n"
 
         return table_content.strip()
@@ -627,8 +627,9 @@ async def handle_message(update: Update, context):
         )
         return  # Блокируем новый вопрос
 
-    user_message1 = update.message.text
-    user_message = replace_standart(user_message1)
+    user_message2 = update.message.text
+    user_message = replace_standart(user_message2)
+    # user_message = standardize_model_name(user_message1, 1)
     user_tag = update.message.from_user.username or update.message.from_user.full_name
     # logger.info("")
     logger.info(f"Получено сообщение от {user_tag}: {user_message}")
@@ -707,7 +708,7 @@ async def handle_message(update: Update, context):
 
         token_count = count_tokens(context_text)
         logger.info(f"Контекст содержит {token_count} токенов")
-        logger.info(f"Используемый контекст: {context_text}")
+        # logger.info(f"Используемый контекст: {context_text}")
 
         # Ищем упоминания рисунков в ответе и создаем ссылки на них
         all_image_mentions = find_image_mentions(context_text)
@@ -732,6 +733,9 @@ async def handle_message(update: Update, context):
             table_ref = find_image_reference_in_milvus(table_text)
             if table_ref:
                 tables_to_mention.append((table_text, table_ref))
+
+        # context_text1 = standardize_model_name(context_text, 0)
+        logger.info(f"Используемый контекст: {context_text}")
         logger.info("Отправка контекста к GPT")
         # Отправка всего контекста к GPT
         response = openai.chat.completions.create(
@@ -766,8 +770,7 @@ async def handle_message(update: Update, context):
                         "ты должен сообщить, что Таблица Х (название) есть в БД, без вывода содержимого таблицы. не говори, что ты не можешь предоставить ее содержимое"
                         "Не отвеча 'Не могу ответить на вопрос, так как данных недостаточно', вместо этого отвечай, что 'Информации не найдено в справочнике'"
                         ""
-                        "Если в названии какого-то оборудования есть слова: 'Standard, Standart, Std, STANDARD, STANDART' - это все одно и то же оборудование"
-                        "Если встречаешь название модели, которое может быть переведено с русского на английский (или наоборот), старайся определить наиболее точное соответствие."
+                        # "Если встречаешь название модели, которое может быть переведено с русского на английский (или наоборот), старайся определить наиболее точное соответствие."
                     ),
                 },
                 {
@@ -853,6 +856,7 @@ async def handle_message(update: Update, context):
             )
 
 
+# нормализует слово standard
 def replace_standart(text):
     """
     Заменяет все варианты слова 'Standart' (Standart, STANDART, standart) на 'Standard'.
@@ -865,6 +869,17 @@ def replace_standart(text):
     """
     print("запустился метод replace_standart")
     return re.sub(r"\b[Ss][Tt][Aa][Nn][Dd][Aa][Rr][DdTt]\b", "Standard", text)
+
+
+# добавляет пропуски в названиях, убирая дефис и разъединяя буквы и цифры
+def standardize_model_name(model_name, param):
+    # Добавляем пробел перед цифрами, если его нет
+    # model_name = re.sub(r"([A-Za-z]+)(\d+)", r"\1 \2", model_name)
+    # Заменяем только те тире, которые находятся между буквами или цифрами
+    if param == 1:
+        model_name = re.sub(r"([A-Za-z]+)(\d+)", r"\1 \2", model_name)
+    model_name = re.sub(r"(?<=[A-Za-z0-9])-(?=[A-Za-z0-9])", " ", model_name)
+    return model_name
 
 
 # Метод для преобразования склонений упомянутых таблиц и рисунков

@@ -23,6 +23,7 @@ from io import BytesIO
 from PIL import Image
 import tiktoken
 from openpyxl import Workbook
+from openpyxl.styles import Font
 
 # Загрузка переменных среды
 load_dotenv("all_tockens.env")
@@ -225,11 +226,12 @@ def split_table_text_logically(table_data):
 
 # Функция сохраняет таблицу в MiniO в формате XLSX
 def save_table_to_minio(bucket_name, table_name, table_data):
-    """Сохраняет таблицу в MinIO в формате XLSX с обводкой всех ячеек, выравниванием по центру и переносом текста."""
+    """Сохраняет таблицу в MinIO в формате XLSX с проверкой 'Cir73SPb+' и изменением границ/цвета текста."""
+
     workbook = Workbook()
     sheet = workbook.active
 
-    # Устанавливаем стили для ячеек
+    # Определяем стили для ячеек
     thin_border = Border(
         left=Side(style="thin"),
         right=Side(style="thin"),
@@ -237,6 +239,9 @@ def save_table_to_minio(bucket_name, table_name, table_data):
         bottom=Side(style="thin"),
     )
 
+    center_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    found_target = False  # Флаг, указывающий, встретилось ли 'Cir73SPb+'
     # Определяем максимальное количество строк и столбцов
     max_rows = len(table_data)
     max_cols = max(len(row) for row in table_data)
@@ -252,14 +257,25 @@ def save_table_to_minio(bucket_name, table_name, table_data):
                 else ""
             )
             cell = sheet.cell(row=row_idx, column=col_idx, value=cell_value)
-            cell.border = thin_border  # Устанавливаем обводку
-            cell.alignment = Alignment(
-                horizontal="center", vertical="center", wrap_text=True
-            )  # Выравнивание и перенос текста
+
+            # Если встретили "Cir73SPb+", активируем флаг
+            if cell_value == "Конец таблицы, начало пояснений":
+                found_target = True
+                cell.value = ""
+
+            # Применяем стили
+            if not found_target:
+                cell.border = thin_border  # Устанавливаем границы только до 'Cir73SPb+'
+            else:
+                cell.border = None  # Убираем границы после 'Cir73SPb+'
+                cell.font = Font(color="FFFFFF")  # Делаем текст белым
+
+            # Выравнивание по центру и перенос текста
+            cell.alignment = center_alignment
 
     # Устанавливаем ширину всех столбцов (50 условных единиц)
-    for col in sheet.columns:
-        column_letter = col[0].column_letter  # Получаем букву столбца
+    for col in range(1, max_cols + 1):
+        column_letter = sheet.cell(row=1, column=col).column_letter
         sheet.column_dimensions[column_letter].width = 50
 
     # Сохраняем данные в буфер для XLSX
