@@ -1378,9 +1378,11 @@ async def handle_all_callbacks(update: Update, context):
 async def handle_feedback_callback(update: Update, context):
     print("вызван метод handle_feedback_callback")
     """Обрабатывает нажатие на кнопки оценки ответа."""
+
     query = update.callback_query
     await query.answer()  # Подтверждаем нажатие
 
+    # Словарь с вариантами оценок
     feedback_map = {
         "feedback_good": "Хорошо 🟢",
         "feedback_neutral": "Удовлетворительно 🟡",
@@ -1391,20 +1393,33 @@ async def handle_feedback_callback(update: Update, context):
     # Разрешаем пользователю задавать новый вопрос
     context.user_data["awaiting_feedback"] = False  # Снимаем блокировку
 
-    # Получаем текст оценки
+    user_tag = (
+        query.from_user.username or query.from_user.full_name
+    )  # Получаем user_tag
 
-    user_tag = query.from_user.username or query.from_user.full_name
+    # Получаем все данные из Google Таблицы
+    all_data = sheet.get_all_values()
 
-    # Сохраняем оценку в Google Sheets (если требуется)
-    try:
-        next_row = len(sheet.get_all_values())  # Определяем строку для записи
-        sheet.update(f"D{next_row}", [[feedback_text]])  # Запись в столбец "D"
-        logger.info(f"Пользователь {user_tag} оценил ответ: {feedback_text}")
-    except Exception as e:
-        logger.error(f"Ошибка записи оценки в Google Sheets: {e}")
+    # Поиск строки с user_tag (колонка E) и пустой оценкой (колонка D)
+    row_index = None
+    for i in range(len(all_data) - 1, 0, -1):  # Проходим с конца к началу
+        if len(all_data[i]) >= 5:  # Проверяем, что строка имеет хотя бы 5 колонок
+            if (
+                all_data[i][4] == user_tag and all_data[i][3] == ""
+            ):  # user_tag в E, оценка в D пуста
+                row_index = i + 1  # Google Sheets использует индексацию с 1
+                break
 
-    # Подтверждаем пользователю выбор
-    await query.edit_message_text(f"Вы выбрали оценку: {feedback_text}")
+    if row_index:
+        # Записываем оценку в колонку D
+        sheet.update(f"D{row_index}", [[feedback_text]])
+        logger.info(
+            f"✅ Оценка '{feedback_text}' записана для {user_tag} в строку {row_index}"
+        )
+        await query.edit_message_text(f"Вы выбрали оценку: {feedback_text}")
+    else:
+        logger.warning(f"⚠ Не найден вопрос без оценки для {user_tag}")
+        await query.edit_message_text(f"⚠ Не найден ваш вопрос для оценки.")
 
 
 # Метод обработки ошибки асинхронной менюшки /comands
