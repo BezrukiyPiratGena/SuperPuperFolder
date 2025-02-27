@@ -33,8 +33,8 @@ def convert_doc_to_docx(doc_path):
 
 
 # Указываем директорию с файлами .doc
-directory = r"C:\Project1\GITProjects\Мануалы\wprd_orig"
+directory = r"C:\Project1\GITProjects\elastic_docker\Доки\word"
 for file in os.listdir(directory):
-    if file.endswith(".docx"):
+    if file.endswith(".doc"):
         doc_path = os.path.join(directory, file)
         convert_doc_to_docx(doc_path)

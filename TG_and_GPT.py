@@ -32,6 +32,8 @@ import asyncio
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 import requests
+import json
+import warnings
 from openpyxl import load_workbook  # работа с xlsx
 from io import StringIO
 from io import BytesIO
@@ -41,6 +43,7 @@ load_dotenv("keys_google_sheet.env")
 load_dotenv("keys_gpt_telegram.env")
 load_dotenv("keys_milvus.env")
 load_dotenv("keys_minio.env")
+load_dotenv("keys_elastic.env")
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # Токен ТГ Бота
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # API токен OpenAI
@@ -76,6 +79,14 @@ MILVUS_PASSWORD = os.getenv("MILVUS_PASSWORD")  # Пароль Милвуса(Б
 
 SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")  # ID Google Таблицы MODEL_GPT_INT
 
+warnings.simplefilter("ignore")  # Игнорируем предупреждения SSL (Для эластики)
+# === Настройки подключения к Elasticsearch ===
+ELASTIC_URL = os.getenv("ELASTIC_URL")  # Адрес Эластики
+ELASTIC_USER = os.getenv("ELASTIC_USER")  # Логин Эластики(БД)
+ELASTIC_PASSWORD = os.getenv("ELASTIC_PASSWORD")  # Пароль Эластики(БД)
+HEADERS = {"Content-Type": "application/json"}
+
+# === Настройки подключения к GoogleSheets ===
 private_key = os.getenv("GOOGLE_PRIVATE_KEY")
 if not private_key:
     raise ValueError("GOOGLE_PRIVATE_KEY is not set")
@@ -280,100 +291,71 @@ def find_most_similar(query_embedding, top_n=15):
     return filtered_texts, filtered_refs, filtered_related_tables
 
 
-def search_in_milvus(query_embedding, top_n=10):
+def search_in_elasticsearch(user_query, top_n=5):
     """
-    Ищет вектор query_embedding в указанной коллекции Milvus (collection_name),
-    возвращая top_n наиболее похожих результатов.
+    Выполняет поиск в Elasticsearch по ключевому слову или фразе.
 
-    Параметры:
-    -----------
-    query_embedding: list или np.array
-        Вектор, который мы ищем.
-    collection_name: str
-        Название коллекции в Milvus, где искать.
-    top_n: int
-        Сколько результатов вернуть (по умолчанию 10).
+    Аргументы:
+        user_query (str): Запрос пользователя (слово или фраза).
+        top_n (int): Количество релевантных документов.
 
     Возвращает:
-    -----------
-    results: list
-        Список объектов Hit; каждый содержит поля:
-        - hit.score: оценка сходства
-        - hit.entity: словарь (по ключам из output_fields)
+        list: [(имя файла, найденный текст, оценка релевантности), ...]
     """
-    # print(f"query_embedding - {query_embedding}")
-    # Убедимся, что у нас np.float32
-    if not isinstance(query_embedding, np.ndarray):
-        query_embedding = np.array(query_embedding, dtype=np.float32)
-    else:
-        query_embedding = query_embedding.astype(np.float32)
-
-    # Инициализируем объект Collection
-    collection = Collection(name="Manuals")
-
-    # Параметры поиска
-    search_params = {
-        "metric_type": "L2",  # Замените на "IP", "COSINE" и т.п. при необходимости
-        "params": {"nprobe": 10},
+    # Формируем поисковый запрос
+    query = {
+        "size": top_n,  # Сколько документов возвращаем
+        "query": {
+            "match_phrase": {"attachment.content": user_query}  # Поиск по тексту PDF
+        },
+        "highlight": {  # Подсветка найденного текста
+            "fields": {
+                "attachment.content": {
+                    "fragment_size": 50,  # Длина одного фрагмента
+                    "number_of_fragments": 5,  # Сколько фрагментов выводить
+                }
+            }
+        },
     }
 
-    # Выполняем поиск
-    results = collection.search(
-        data=[query_embedding.tolist()],  # Передаём список векторов
-        anns_field="embedding",  # Поле, в котором хранятся эмбеддинги
-        param=search_params,
-        limit=top_n,
-        output_fields=[
-            "text",
-            "manual_id",
-            "embedding",
-        ],  # Добавьте поля, которые нужны
-    )
-    # Возвращаем список Hit-объектов для нашего запроса.
-    # results[0] — это список из top_n найденных элементов
-    hits = results[0]
-    manuals_score = []  # совпадение векторов
-    manual_ids = []  # Текстовая часть соответствующая вектору
-    manual_texts = []  # Название оригинального документа
-    manuals_embeddings = []  # Найденные схожие вектора
+    try:
+        # Отправляем запрос в Elasticsearch
+        response = requests.get(
+            ELASTIC_URL,
+            headers=HEADERS,
+            data=json.dumps(query),
+            auth=(ELASTIC_USER, ELASTIC_PASSWORD),
+            verify=False,  # ⚠ Отключаем проверку SSL (лучше включить в проде!)
+        )
 
-    for hit_score in hits:
-        manual_score = 1 - hit_score.score
-        # print(manual_score)
-        if manual_score == 1.0:
-            manual_score = 100.0
+        if response.status_code == 200:
+            result = response.json()
+            hits = result.get("hits", {}).get("hits", [])
+
+            if hits:
+                search_results = []
+                for hit in hits:
+                    filename = hit["_source"].get("filename", "Неизвестный файл")
+                    highlights = hit.get("highlight", {}).get(
+                        "attachment.content", ["Фрагменты не найдены"]
+                    )
+                    score = round(
+                        hit["_score"] * 10, 2
+                    )  # Оценка релевантности (0-100%)
+
+                    search_results.append((filename, highlights, score))
+
+                return search_results
+
+            else:
+                return [("❌ Ничего не найдено", [], 0)]
         else:
-            manual_score = round((manual_score), 2) * 100
-        manuals_score.append(manual_score)
-        # print("score:", manual_score)
+            return [(f"⚠ Ошибка запроса: {response.status_code}", [], 0)]
 
-    for hit_id in hits:
-        manual_id = hit_id.entity.get("manual_id")
-        manual_ids.append(manual_id)
-        # print("manual_id:", manual_id)
-
-    for hit_text in hits:
-        manual_text = hit_text.entity.get("text")
-        manual_texts.append(manual_text)
-        # print("text:", manual_text)
-
-    for hit_embedding in hits:
-        manuals_embedding = hit_embedding.entity.get("embedding")
-        manuals_embeddings.append(manuals_embedding)
-        # print("embedding:", manuals_embedding)
-
-    for col, txt, score in zip(manual_ids, manual_texts, manuals_score):
-        print("Совпадение:", score)
-        print("Название мануала:", col)
-        print("Текстовый блок:", txt)
-
-    """for hit in hits:
-        print("score:", hit.score)
-        print("manual_id:", hit.entity.get("manual_id"))
-        print("text:", hit.entity.get("text"))
-        print("embedding:", hit.entity.get("embedding"))"""
-
-    return manual_ids, manual_texts, manuals_score
+    except requests.exceptions.RequestException as req_err:
+        return [(f"🚨 Ошибка сети: {req_err}", [], 0)]
+    except Exception as e:
+        return [(f"⚠ Неизвестная ошибка: {e}", [], 0)]
 
 
 def find_most_similar_with_collections(context, query_embedding, top_n=10):
@@ -468,7 +450,7 @@ async def info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def metod(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("Поиск по справочнику", callback_data="engs_bot")],
-        # [InlineKeyboardButton("Поиск мануалов", callback_data="manuals_engrs")],
+        [InlineKeyboardButton("Поиск мануалов", callback_data="manuals_engrs")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -927,58 +909,40 @@ async def handle_message_manuals(update: Update, context):
 
     user_message = update.message.text
     user_tag = update.message.from_user.username or update.message.from_user.full_name
-    # print("Точка1")
+
     try:
+        # 🔎 Выполняем поиск в Elasticsearch
+        search_results = search_in_elasticsearch(user_message, top_n=5)
 
-        query_embedding = create_embedding_for_query(user_message, update)
-        # print(f"query_embedding - {query_embedding}")
-
-        # Получаем релевантные тексты и коллекции
-        """related_collections = find_most_similar_with_collections(
-            context, query_embedding
-        )"""
-        # print("Точка 1")
-        related_collections, related_texts, related_score = search_in_milvus(
-            query_embedding
-        )
-
-        # print(f"Список релевантных мануалов:")
-
-        responce = f"Найдены документы, схожие по отрывкам\n"
+        # Формируем ответ пользователю
+        response_text = "📚 Найденные документы:\n\n"
         count_finds = 1
-        for col, txt, score in zip(related_collections, related_texts, related_score):
-            responce += (
-                f"{count_finds}) Релевантный документ - {col}\n"  # Название коллекции
+
+        for filename, highlights, score in search_results:
+            response_text += (
+                f"{count_finds}) 📄 Документ - {filename} (🔍 Совпадение: {score}%)\n"
             )
-            responce += f"Релевантный текст - {txt}\n"  # Текст
-            responce += f"Векторное совпадение - {score}%\n\n"  # Текст
+            for i, fragment in enumerate(highlights, start=1):
+                response_text += f"  🔹 Фрагмент {i}: {fragment}\n"
+            response_text += "\n"
             count_finds += 1
-        await send_large_message_for_manuals(update, responce)
+
+        # Если ничего не найдено
+        if len(search_results) == 1 and search_results[0][0] == "❌ Ничего не найдено":
+            response_text = "❌ По вашему запросу ничего не найдено в базе."
+
+        # Отправляем сообщение в Telegram
+        await send_large_message_for_manuals(update, response_text)
         await request_feedback(update, context)
 
-        # Сохраняем контекст в лог-файл
-        log_filename = save_context_to_log(user_tag, responce)
-        # Логирование файла для отладки (опционально)
-        logger.info(
-            f"Контекст для пользователя {user_tag} сохранен в файл: {log_filename}"
-        )
+        # Сохраняем лог в MinIO
+        log_filename = save_context_to_log(user_tag, response_text)
+        logger.info(f"Контекст для {user_tag} сохранен в файл: {log_filename}")
 
-        # Логируется в табличку
+        # Логируем в Google Таблицу
         save_user_question_to_sheet(
-            user_message, responce, user_tag, log_filename, "Рижим Мануалов"
+            user_message, response_text, user_tag, log_filename, "Режим Мануалов"
         )
-        # await update.message.reply_text(responce)
-
-        """for col in related_collections:
-            responce += col + "\n"
-            # await update.message.reply_text(col)
-
-        for text in related_texts:
-            responce += "Релевантный текст - " + text + "\n"
-            # await update.message.reply_text(col)
-        await update.message.reply_text(responce)
-
-        additional_table_mentions = find_table_mentions(responce)"""
 
     except Exception as e:
         logger.error(f"Ошибка обработки сообщения в режиме мануалов: {e}")

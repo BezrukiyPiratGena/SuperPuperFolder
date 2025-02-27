@@ -56,7 +56,7 @@ name_of_collection_milvus = MILVUS_COLLECTION
 minio_folder_docs_name = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK  # <================================= Выбери папку, в которую будет записываться инфа (Справочник)
 
 name_of_bucket_minio = MINIO_BUCKET_NAME
-path_of_doc_for_convert = r"C:\Project1\GITProjects\myproject2\add_docs_to_milvus\spravochnik.docx"  # <============== Путь к файлу для добавления его в БД
+path_of_doc_for_convert = r"C:\Project1\GITProjects\myproject2\add_docs_to_milvus\spravochnik_mini.docx"  # <============== Путь к файлу для добавления его в БД
 description_milvus_collection = (
     "Справочник СИР"  # <============== Описание коллекции milvus
 )
