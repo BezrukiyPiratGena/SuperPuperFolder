@@ -45,7 +45,7 @@ load_dotenv("keys_milvus.env")
 load_dotenv("keys_minio.env")
 load_dotenv("keys_elastic.env")
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # Токен ТГ Бота
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # Токен ТГ Ботa
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # API токен OpenAI
 MODEL_GPT_INT = os.getenv("MODEL_GPT_INT")  # Модель ИИ, с которой ведется диалог
 
