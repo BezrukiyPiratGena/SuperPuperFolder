@@ -65,9 +65,7 @@ logging.basicConfig(
 
 # =======================================================================================================
 
-DOCX_DIRECTORY = (
-    r"C:\Project1\GITProjects\scripts\Шлюхи"  # <================= Путь к файлам docx
-)
+DOCX_DIRECTORY = r"C:\Project1\GITProjects\elastic_docker\Доки"  # <================= Путь к файлам docx
 
 end_name_docs = ".pdf"  # <============ Конец имени исходного файла, названия коллекции
 
@@ -75,6 +73,7 @@ end_name_docs = ".pdf"  # <============ Конец имени исходного
 
 docx_files = [file for file in os.listdir(DOCX_DIRECTORY) if file.endswith(".pdf")]
 docx_count = len(docx_files)
+
 print(f"Количество релевантных документов: {docx_count}")
 
 # Настройка важных переменных
@@ -137,12 +136,18 @@ def save_table_to_minio(
         # Генерируем ключ для сохранения в MinIO
         minio_key = f"{minio_folder_docs_name}/{description_milvus_collection}"
 
+        content_type = (
+            "application/pdf"
+            if description_milvus_collection.lower().endswith(".pdf")
+            else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+
         # Сохраняем файл в MinIO
         s3_client.put_object(
             Bucket=bucket_name,
             Key=minio_key,
             Body=file_data,
-            ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ContentType=content_type,
             ContentDisposition="inline",  # Указывает браузеру открывать файл, а не скачивать
         )
 
@@ -236,7 +241,7 @@ def move_file(file_name, destination_path):
 
 def process_docx_file(docx_file, s3_client, path_to_save_manuals):
     """Асинхронная функция для обработки одного файла."""
-    print(f"Метод process_docx_file запустился для {docx_file}")
+    # print(f"Метод process_docx_file запустился для {docx_file}")
 
     # Работа с Milvus
 
@@ -250,16 +255,13 @@ def process_docx_file(docx_file, s3_client, path_to_save_manuals):
         "---------------------------------------------------------------------------------------------------"
     )
     print(f"{description_milvus_collection} начало загрузки в MiniO")
-    print("Список всех мануалов")
-    print(description_milvus_collection)
+    # print("Список всех мануалов")
+    # print(description_milvus_collection)
     save_table_to_minio(
         name_of_bucket_minio, description_milvus_collection, path_to_save_manuals
     )  # <===================== Метод загрузки исходника в MiniO
     # move_file(description_milvus_collection, path_to_save_manuals)
     # print(f"Коллекция '{description_milvus_collection}' загружена в MiniO")
-    print(
-        "---------------------------------------------------------------------------------------------------"
-    )
 
 
 def main():

@@ -291,28 +291,28 @@ def find_most_similar(query_embedding, top_n=15):
     return filtered_texts, filtered_refs, filtered_related_tables
 
 
-def search_in_elasticsearch(user_query, top_n=5):
+def search_in_elasticsearch(user_query, top_n):
     """
-    Выполняет поиск в Elasticsearch по ключевому слову или фразе.
+    Выполняет поиск в Elasticsearch по ключевому слову или фразе и считает
+    точное количество вхождений в каждом документе.
 
     Аргументы:
         user_query (str): Запрос пользователя (слово или фраза).
         top_n (int): Количество релевантных документов.
 
     Возвращает:
-        list: [(имя файла, найденный текст, оценка релевантности), ...]
+        list: [(имя файла, найденные фрагменты, точное количество вхождений)]
     """
     # Формируем поисковый запрос
     query = {
-        "size": top_n,  # Сколько документов возвращаем
-        "query": {
-            "match_phrase": {"attachment.content": user_query}  # Поиск по тексту PDF
-        },
-        "highlight": {  # Подсветка найденного текста
+        "size": top_n,
+        "_source": ["filename", "attachment.content"],  # Запрашиваемые поля
+        "query": {"match_phrase": {"attachment.content": user_query}},
+        "highlight": {
             "fields": {
                 "attachment.content": {
-                    "fragment_size": 50,  # Длина одного фрагмента
-                    "number_of_fragments": 5,  # Сколько фрагментов выводить
+                    "fragment_size": 150,  # Увеличили размер фрагмента
+                    "number_of_fragments": 10,
                 }
             }
         },
@@ -325,7 +325,7 @@ def search_in_elasticsearch(user_query, top_n=5):
             headers=HEADERS,
             data=json.dumps(query),
             auth=(ELASTIC_USER, ELASTIC_PASSWORD),
-            verify=False,  # ⚠ Отключаем проверку SSL (лучше включить в проде!)
+            verify=False,
         )
 
         if response.status_code == 200:
@@ -335,27 +335,41 @@ def search_in_elasticsearch(user_query, top_n=5):
             if hits:
                 search_results = []
                 for hit in hits:
-                    filename = hit["_source"].get("filename", "Неизвестный файл")
+                    filename = hit.get("_source", {}).get(
+                        "filename", "Неизвестный файл"
+                    )
                     highlights = hit.get("highlight", {}).get(
                         "attachment.content", ["Фрагменты не найдены"]
                     )
-                    score = round(
-                        hit["_score"] * 10, 2
-                    )  # Оценка релевантности (0-100%)
 
-                    search_results.append((filename, highlights, score))
+                    # Получаем полный текст документа
+                    content = (
+                        hit.get("_source", {}).get("attachment", {}).get("content", "")
+                    )
+
+                    # Считаем точное количество вхождений искомой фразы в тексте
+                    occurrences = (
+                        content.lower().count(user_query.lower()) if content else 0
+                    )
+
+                    search_results.append((filename, highlights, occurrences))
+
+                # Сортируем по убыванию количества совпадений
+                search_results.sort(key=lambda x: x[2], reverse=True)
 
                 return search_results
 
             else:
                 return [("❌ Ничего не найдено", [], 0)]
         else:
-            return [(f"⚠ Ошибка запроса: {response.status_code}", [], 0)]
+            return [
+                (f"⚠️ Ошибка запроса: {response.status_code} - {response.text}", [], 0)
+            ]
 
     except requests.exceptions.RequestException as req_err:
         return [(f"🚨 Ошибка сети: {req_err}", [], 0)]
     except Exception as e:
-        return [(f"⚠ Неизвестная ошибка: {e}", [], 0)]
+        return [(f"⚠️ Неизвестная ошибка: {e}", [], 0)]
 
 
 def find_most_similar_with_collections(context, query_embedding, top_n=10):
@@ -912,19 +926,30 @@ async def handle_message_manuals(update: Update, context):
 
     try:
         # 🔎 Выполняем поиск в Elasticsearch
-        search_results = search_in_elasticsearch(user_message, top_n=5)
+        search_results = search_in_elasticsearch(user_message, 30)
 
         # Формируем ответ пользователю
-        response_text = "📚 Найденные документы:\n\n"
+        response_text = "📚 Найденные документы по Вашему запросу:\n\n"
+        document_names = []  # Список названий мануалов
+        list_of_filenames = []  # Инициализируем список перед циклом
         count_finds = 1
+        book1 = "📗"
+        book2 = "📕"
+        book3 = "📘"
 
         for filename, highlights, score in search_results:
-            response_text += (
-                f"{count_finds}) 📄 Документ - {filename} (🔍 Совпадение: {score}%)\n"
-            )
-            for i, fragment in enumerate(highlights, start=1):
-                response_text += f"  🔹 Фрагмент {i}: {fragment}\n"
-            response_text += "\n"
+            if count_finds % 3 == 1:
+                book = book1
+            elif count_finds % 3 == 2:
+                book = book2
+            elif count_finds % 3 == 0:
+                book = book3
+
+            response_text += f" {book} {count_finds} документ - {filename}\n"
+            # logger.info(
+            #    f" {book} {count_finds} Мануал - {filename}\n"
+            # )
+            document_names.append(filename)  # Добавляем в список названий
             count_finds += 1
 
         # Если ничего не найдено
@@ -932,8 +957,11 @@ async def handle_message_manuals(update: Update, context):
             response_text = "❌ По вашему запросу ничего не найдено в базе."
 
         # Отправляем сообщение в Telegram
-        await send_large_message_for_manuals(update, response_text)
+        response_text_ready = format_document_links(response_text, document_names)
+        await send_large_message_for_manuals(update, response_text_ready)
         await request_feedback(update, context)
+        # Теперь загружаем файлы из MinIO и отправляем в чат
+        await send_manuals_from_minio(update, document_names)
 
         # Сохраняем лог в MinIO
         log_filename = save_context_to_log(user_tag, response_text)
@@ -947,6 +975,69 @@ async def handle_message_manuals(update: Update, context):
     except Exception as e:
         logger.error(f"Ошибка обработки сообщения в режиме мануалов: {e}")
         await update.message.reply_text("Произошла ошибка при обработке запроса.")
+
+
+def format_document_links(bot_reply, document_names):
+    """
+    Форматирует текст ответа, добавляя кликабельные ссылки на документы.
+
+    Аргументы:
+        bot_reply (str): Исходный текст ответа бота.
+        document_names (list): Список названий документов.
+        minio_endpoint (str): URL MinIO.
+        minio_bucket (str): Название бакета в MinIO.
+
+    Возвращает:
+        str: Отформатированный текст с кликабельными ссылками.
+    """
+    for doc_name in document_names:
+        # Формируем URL документа
+        doc_url = f"{MINIO_ENDPOINT}/{MINIO_BUCKET_NAME}/{MINIO_FOLDER_DOCS_NAME_MANUAL}/{doc_name}"
+
+        # Создаем HTML-ссылку
+        link_text = f'<a href="{doc_url}" target="_blank">{doc_name}</a>'
+
+        # Заменяем название документа на ссылку в тексте ответа
+        bot_reply = re.sub(
+            rf"\b{re.escape(doc_name)}\b",  # Ищем точное совпадение
+            link_text,
+            bot_reply,
+        )
+
+    return bot_reply
+
+
+async def send_manuals_from_minio(update, document_names):
+    """
+    Загружает мануалы из MinIO и отправляет их в чат Telegram.
+    """
+    sent_files = set()  # Множество для отслеживания уже отправленных файлов
+
+    for filename in document_names:
+        file_key = f"{MINIO_FOLDER_DOCS_NAME_MANUAL}/{filename}"  # Формируем путь
+
+        # Проверяем, был ли файл уже отправлен
+        if file_key in sent_files:
+            continue
+
+        try:
+            # Запрашиваем файл из MinIO
+            response = s3_client.get_object(Bucket=MINIO_BUCKET_NAME, Key=file_key)
+            file_data = response["Body"].read()
+
+            # Отправляем файл пользователю в Telegram
+            await update.message.reply_document(
+                document=BytesIO(file_data), filename=filename
+            )
+
+            logger.info(f"Файл {filename} успешно отправлен.")
+
+            sent_files.add(file_key)  # Добавляем в список отправленных файлов
+
+        except Exception as e:
+            logger.error(f"Ошибка при отправке файла {filename}: {e}")
+            if filename != "❌ Ничего не найдено":
+                await update.message.reply_text(f"❌ Ошибка при загрузке {filename}.")
 
 
 # Метод поиска упомянутых изображений по формату "Рисунок Х"
@@ -1100,14 +1191,14 @@ async def send_large_message_for_manuals(update, text, max_length=4000):
                 current_message = paragraph
         else:
             # Если текущее сообщение заполнено, отправляем его и начинаем новое
-            await update.message.reply_text(current_message)
-            # await update.message.reply_text(current_message, parse_mode="HTML")
+            # await update.message.reply_text(current_message)
+            await update.message.reply_text(current_message, parse_mode="HTML")
             current_message = paragraph  # Начинаем новое сообщение с текущего абзаца
 
     # Отправляем оставшуюся часть сообщения, если что-то осталось
     if current_message:
-        await update.message.reply_text(current_message)
-        # await update.message.reply_text(current_message, parse_mode="HTML")
+        # await update.message.reply_text(current_message)
+        await update.message.reply_text(current_message, parse_mode="HTML")
 
 
 # Метод дополнительного поиск упомянутых изображений в ответе GPT по Рисунок Х
@@ -1215,65 +1306,6 @@ def clear_message_bot():
             logger.info("Нет новых сообщений.")
     else:
         logger.info(f"Ошибка API Telegram: {response.status_code}, {response.text}")
-
-
-"""# Обработка выбора базы данных через callback кнопки в ТГ Боте
-async def select_db(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("Запустился метод select_db")
-    query = update.callback_query
-    context.user_data["minio_folder_docs_name"] = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK
-    await query.answer()  # Подтверждаем получение запроса
-
-    # global minio_folder_docs_name  # Объявляем переменную глобальнойы
-    global milvus_collection_name  # Объявляем переменную глобальной
-
-    selected_db = query.data  # Получаем callback_data из нажатой кнопки
-    context.user_data["selected_db"] = selected_db  # Сохраняем выбор пользователя
-    # connect_to_milvus(selected_db)  # Подключаемся к выбранной базе данных
-    connections.disconnect(alias="default")  # Отключаемся от нынешней бд в Milvus
-
-    # Отправляем сообщение пользователю
-    if selected_db == "engs_bot":
-        await query.edit_message_text(f"Вы выбрали режим справочника: {selected_db}")
-        minio_folder_docs_name = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK  # Изменение папки для поиска таблиц\рисунков
-        # logger.info(minio_folder_docs_name)
-        milvus_collection_name = MILVUS_COLLECTION  # Изменение коллекции milvus
-        # logger.info(milvus_collection_name)
-        context.user_data["minio_folder_docs_name"] = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK
-        context.user_data["milvus_collection_name"] = MILVUS_COLLECTION
-        context.user_data["handle_message_method"] = handle_message
-        # Подключаемся к Milvus с справочником
-        connections.connect(
-            alias="default",
-            host=MILVUS_HOST,
-            port=MILVUS_PORT,
-            db_name=MILVUS_DB_NAME_FIRST,
-            user=MILVUS_USER,
-            password=MILVUS_PASSWORD,
-        )
-    else:
-        await query.edit_message_text(
-            f"Вы выбрали режим поиска мануалов: {selected_db}"
-        )
-        minio_folder_docs_name = (
-            MINIO_FOLDER_DOCS_NAME_MANUAL  # Изменение папки для поиска таблиц\рисунков
-        )
-        # logger.info(minio_folder_docs_name)
-        milvus_collection_name = MILVUS_COLLECTION  # Изменение коллекции milvus
-        # logger.info(milvus_collection_name)
-        context.user_data["minio_folder_docs_name"] = MINIO_FOLDER_DOCS_NAME_MANUAL
-        context.user_data["milvus_collection_name"] = MILVUS_COLLECTION
-        context.user_data["handle_message_method"] = handle_message_manuals
-        connections.connect(
-            alias="default",
-            host=MILVUS_HOST,
-            port=MILVUS_PORT,
-            db_name=MILVUS_DB_NAME_FIRST,
-            user=MILVUS_USER,
-            password=MILVUS_PASSWORD,
-        )
-    await context
-    # Загружаем коллекции при втором режиме работы"""
 
 
 # Метод для получения описания (description) коллекции Milvus
