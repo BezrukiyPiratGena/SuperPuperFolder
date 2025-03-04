@@ -37,6 +37,8 @@ import warnings
 from openpyxl import load_workbook  # работа с xlsx
 from io import StringIO
 from io import BytesIO
+from flask import Flask, request
+from threading import Thread
 
 # Загрузка переменных окружения из файла .env
 load_dotenv("keys_google_sheet.env")
@@ -134,6 +136,10 @@ credentials = Credentials.from_service_account_info(
 client = gspread.authorize(credentials)
 sheet = client.open_by_key(SPREADSHEET_ID).sheet1
 logger.info("Подключение к MiniO начато")
+
+app = Flask(__name__)
+
+
 # Настройка MinIO клиента
 s3_client = boto3.client(
     "s3",
@@ -957,11 +963,14 @@ async def handle_message_manuals(update: Update, context):
             response_text = "❌ По вашему запросу ничего не найдено в базе."
 
         # Отправляем сообщение в Telegram
-        response_text_ready = format_document_links(response_text, document_names)
+        response_text_ready = format_document_links(
+            update, response_text, document_names
+        )
+        print(response_text_ready)
         await send_large_message_for_manuals(update, response_text_ready)
         await request_feedback(update, context)
         # Теперь загружаем файлы из MinIO и отправляем в чат
-        await send_manuals_from_minio(update, document_names)
+        # await send_manuals_from_minio(update, document_names)
 
         # Сохраняем лог в MinIO
         log_filename = save_context_to_log(user_tag, response_text)
@@ -977,34 +986,38 @@ async def handle_message_manuals(update: Update, context):
         await update.message.reply_text("Произошла ошибка при обработке запроса.")
 
 
-def format_document_links(bot_reply, document_names):
+def format_document_links(update: Update, bot_reply, document_names):
     """
-    Форматирует текст ответа, добавляя кликабельные ссылки на документы.
+    Добавляет ссылки к каждому найденному документу.
 
     Аргументы:
         bot_reply (str): Исходный текст ответа бота.
         document_names (list): Список названий документов.
-        minio_endpoint (str): URL MinIO.
-        minio_bucket (str): Название бакета в MinIO.
 
     Возвращает:
-        str: Отформатированный текст с кликабельными ссылками.
+        str: Отформатированный текст с добавленными ссылками.
     """
-    for doc_name in document_names:
-        # Формируем URL документа
-        doc_url = f"{MINIO_ENDPOINT}/{MINIO_BUCKET_NAME}/{MINIO_FOLDER_DOCS_NAME_MANUAL}/{doc_name}"
+    user_id = update.message.from_user.id
+    print(f"user_id - {user_id}")
 
-        # Создаем HTML-ссылку
-        link_text = f'<a href="{doc_url}" target="_blank">{doc_name}</a>'
+    formatted_reply = []
 
-        # Заменяем название документа на ссылку в тексте ответа
-        bot_reply = re.sub(
-            rf"\b{re.escape(doc_name)}\b",  # Ищем точное совпадение
-            link_text,
-            bot_reply,
-        )
+    for line in bot_reply.split("\n"):
+        found = False
+        for doc_name in document_names:
+            if doc_name in line:
+                doc_url = (
+                    f"http://localhost:8080/download?user_id={user_id}&file={doc_name}"
+                )
+                print(f"doc_name - {doc_name}")
+                formatted_reply.append(line)  # Оставляем название документа
+                formatted_reply.append(f"{doc_url}")  # Добавляем ссылку
+                found = True
+                break
+        if not found:
+            formatted_reply.append(line)
 
-    return bot_reply
+    return "\n".join(formatted_reply)
 
 
 async def send_manuals_from_minio(update, document_names):
@@ -1165,39 +1178,38 @@ async def send_large_message(update, text, max_length=4000):
 
 
 async def send_large_message_for_manuals(update, text, max_length=4000):
-    # Разбиваем текст по абзацам
+    """
+    Отправляет большие сообщения, разбивая их по 4000 символов.
+    """
     paragraphs = text.split("\n\n")
     current_message = ""
 
+    html_tag_pattern = re.compile(r"<a href=.*?>.*?</a>")  # Проверка HTML-ссылок
+
     for paragraph in paragraphs:
-        # Проверяем, если текущий абзац слишком длинный, чтобы отправить его как есть
         if len(paragraph) > max_length:
-            # Если абзац превышает max_length, разбиваем его на подчасти
+            if html_tag_pattern.search(paragraph):  # Если есть ссылка, не разрезаем
+                await update.message.reply_text(paragraph, parse_mode="HTML")
+                continue
+
             sub_paragraphs = [
                 paragraph[i : i + max_length]
                 for i in range(0, len(paragraph), max_length)
             ]
             for sub_paragraph in sub_paragraphs:
-                await update.message.reply_text(sub_paragraph)
-                # await update.message.reply_text(sub_paragraph, parse_mode="HTML")
-            continue  # Переходим к следующему абзацу после отправки разбиения
+                await update.message.reply_text(sub_paragraph, parse_mode="HTML")
+            continue
 
-        # Проверяем, можно ли добавить текущий абзац в сообщение
         if len(current_message) + len(paragraph) + 2 <= max_length:
-            # Добавляем абзац в текущее сообщение
             if current_message:
                 current_message += "\n\n" + paragraph
             else:
                 current_message = paragraph
         else:
-            # Если текущее сообщение заполнено, отправляем его и начинаем новое
-            # await update.message.reply_text(current_message)
             await update.message.reply_text(current_message, parse_mode="HTML")
-            current_message = paragraph  # Начинаем новое сообщение с текущего абзаца
+            current_message = paragraph
 
-    # Отправляем оставшуюся часть сообщения, если что-то осталось
     if current_message:
-        # await update.message.reply_text(current_message)
         await update.message.reply_text(current_message, parse_mode="HTML")
 
 
@@ -1544,5 +1556,48 @@ def main():
     """
 
 
+app = Flask(__name__)
+
+
+@app.route("/download", methods=["GET"])
+def send_document():
+    """Обработчик для отправки файла по Telegram при нажатии на ссылку"""
+    user_id = request.args.get("user_id")  # ID пользователя из ссылки
+    file_name = request.args.get("file")  # Название файла
+    print(f"user_id- {user_id}")
+    print(f"file_name - {file_name}")
+
+    if not user_id or not file_name:
+        return "Ошибка: Неверные параметры запроса", 400
+
+    try:
+        # Загружаем файл из MinIO
+        file_key = f"{MINIO_FOLDER_DOCS_NAME_MANUAL}/{file_name}"
+        response = s3_client.get_object(Bucket=MINIO_BUCKET_NAME, Key=file_key)
+        file_data = response["Body"].read()
+
+        # Отправляем документ пользователю в Telegram
+        telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
+        requests.post(
+            telegram_url,
+            data={"chat_id": user_id},
+            files={"document": (file_name, BytesIO(file_data))},
+        )
+
+        return f"Файл {file_name} отправлен пользователю {user_id}!", 200
+
+    except Exception as e:
+        return f"Ошибка: {str(e)}", 500
+
+
+def run_flask():
+    """Функция для запуска Flask-сервера в отдельном потоке"""
+    app.run(host="0.0.0.0", port=8080, threaded=True)
+
+
 if __name__ == "__main__":
-    main()
+    # Запускаем Flask-сервер в фоне
+    flask_thread = Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+
+    main()  # Запускаем Telegram бота

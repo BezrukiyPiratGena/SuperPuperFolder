@@ -907,10 +907,7 @@ def normalize_mentions(gpt_response):
 
 # Метод для обработки сообщений в режиме мануалов
 async def handle_message_manuals(update: Update, context):
-    """
-    Метод обрабатывает поиск документов, теперь без ссылок, а с кнопками для скачивания.
-    """
-
+    # print("Заработал режим handle_message_manuals")
     if context.user_data.get("last_selected_mode") != "manuals_engrs":
         logger.error("handle_message_manuals вызван вне режима мануалов.")
         return
@@ -934,40 +931,37 @@ async def handle_message_manuals(update: Update, context):
         # Формируем ответ пользователю
         response_text = "📚 Найденные документы по Вашему запросу:\n\n"
         document_names = []  # Список названий мануалов
-        keyboard_buttons = []  # Кнопки для инлайн-клавиатуры
+        list_of_filenames = []  # Инициализируем список перед циклом
         count_finds = 1
-        book1, book2, book3 = "📗", "📕", "📘"
+        book1 = "📗"
+        book2 = "📕"
+        book3 = "📘"
 
         for filename, highlights, score in search_results:
-            book = [book1, book2, book3][count_finds % 3]
+            if count_finds % 3 == 1:
+                book = book1
+            elif count_finds % 3 == 2:
+                book = book2
+            elif count_finds % 3 == 0:
+                book = book3
 
-            # response_text += f"{book} {count_finds} документ - {filename}\n"
+            response_text += f" {book} {count_finds} документ - {filename}\n"
+            # logger.info(
+            #    f" {book} {count_finds} Мануал - {filename}\n"
+            # )
             document_names.append(filename)  # Добавляем в список названий
-
-            # 📌 Добавлена кнопка для запроса файла по callback
-            safe_filename = re.sub(r"[^a-zA-Z0-9_-]", "_", filename)[
-                :60
-            ]  # Убираем запрещенные символы и ограничиваем длину
-            keyboard_buttons.append(
-                [
-                    InlineKeyboardButton(
-                        f"{book} {filename}", callback_data=f"file_{safe_filename}"
-                    )
-                ]
-            )
-
             count_finds += 1
 
         # Если ничего не найдено
         if len(search_results) == 1 and search_results[0][0] == "❌ Ничего не найдено":
             response_text = "❌ По вашему запросу ничего не найдено в базе."
 
-        # 📌 Вместо вставки ссылок теперь добавлены кнопки
-        reply_markup = InlineKeyboardMarkup(keyboard_buttons)
-        await update.message.reply_text(response_text, reply_markup=reply_markup)
-
-        # Запрос на оценку ответа
+        # Отправляем сообщение в Telegram
+        response_text_ready = format_document_links(response_text, document_names)
+        await send_large_message_for_manuals(update, response_text_ready)
         await request_feedback(update, context)
+        # Теперь загружаем файлы из MinIO и отправляем в чат
+        # await send_manuals_from_minio(update, document_names)
 
         # Сохраняем лог в MinIO
         log_filename = save_context_to_log(user_tag, response_text)
@@ -980,7 +974,7 @@ async def handle_message_manuals(update: Update, context):
 
     except Exception as e:
         logger.error(f"Ошибка обработки сообщения в режиме мануалов: {e}")
-        await update.message.reply_text("❌ Ошибка при обработке запроса.")
+        await update.message.reply_text("Произошла ошибка при обработке запроса.")
 
 
 def format_document_links(bot_reply, document_names):
@@ -1171,39 +1165,42 @@ async def send_large_message(update, text, max_length=4000):
 
 
 async def send_large_message_for_manuals(update, text, max_length=4000):
-    # Разбиваем текст по абзацам
+    # Разделяем текст по абзацам
     paragraphs = text.split("\n\n")
     current_message = ""
+
+    html_tag_pattern = re.compile(r"<a href=.*?>.*?</a>")  # Поиск HTML-ссылок
 
     for paragraph in paragraphs:
         # Проверяем, если текущий абзац слишком длинный, чтобы отправить его как есть
         if len(paragraph) > max_length:
-            # Если абзац превышает max_length, разбиваем его на подчасти
+            # Проверяем, содержит ли абзац HTML-ссылку
+            if html_tag_pattern.search(paragraph):
+                # Если да, то НЕ разрезаем его, а отправляем целиком
+                await update.message.reply_text(paragraph, parse_mode="HTML")
+                continue
+
+            # Если нет HTML, тогда разбиваем на подчасти
             sub_paragraphs = [
                 paragraph[i : i + max_length]
                 for i in range(0, len(paragraph), max_length)
             ]
             for sub_paragraph in sub_paragraphs:
-                await update.message.reply_text(sub_paragraph)
-                # await update.message.reply_text(sub_paragraph, parse_mode="HTML")
-            continue  # Переходим к следующему абзацу после отправки разбиения
+                await update.message.reply_text(sub_paragraph, parse_mode="HTML")
+            continue  # Переходим к следующему абзацу
 
-        # Проверяем, можно ли добавить текущий абзац в сообщение
+        # Проверяем, можно ли добавить текущий абзац в текущее сообщение
         if len(current_message) + len(paragraph) + 2 <= max_length:
-            # Добавляем абзац в текущее сообщение
             if current_message:
                 current_message += "\n\n" + paragraph
             else:
                 current_message = paragraph
         else:
-            # Если текущее сообщение заполнено, отправляем его и начинаем новое
-            # await update.message.reply_text(current_message)
             await update.message.reply_text(current_message, parse_mode="HTML")
-            current_message = paragraph  # Начинаем новое сообщение с текущего абзаца
+            current_message = paragraph  # Начинаем новое сообщение
 
     # Отправляем оставшуюся часть сообщения, если что-то осталось
     if current_message:
-        # await update.message.reply_text(current_message)
         await update.message.reply_text(current_message, parse_mode="HTML")
 
 
@@ -1363,46 +1360,13 @@ async def request_feedback(update, context):
     context.user_data["awaiting_feedback"] = True  # Блокируем следующий вопрос
 
 
-async def send_manual_by_callback(update: Update, context):
-    """
-    Метод загружает и отправляет документ из MinIO по callback-запросу.
-    """
-    query = update.callback_query
-    await query.answer()  # Подтверждаем получение нажатия
-
-    filename = query.data.replace(
-        "file_", "", 1
-    )  # Убираем только первое вхождение "file_"
-    file_key = (
-        f"{MINIO_FOLDER_DOCS_NAME_MANUAL}/{filename}"  # 📌 Формируем путь в MinIO
-    )
-
-    try:
-        response = s3_client.get_object(Bucket=MINIO_BUCKET_NAME, Key=file_key)
-        file_data = response["Body"].read()
-
-        # 📌 Отправляем документ в чат
-        await query.message.reply_document(
-            document=BytesIO(file_data), filename=filename
-        )
-        logger.info(f"Файл {filename} успешно отправлен.")
-
-    except Exception as e:
-        logger.error(f"Ошибка при отправке файла {filename}: {e}")
-        await query.message.reply_text(f"❌ Ошибка при загрузке {filename}.")
-
-
 async def handle_all_callbacks(update: Update, context):
     """Обрабатывает все CallbackQuery и перенаправляет в нужный обработчик."""
     query = update.callback_query
     await query.answer()  # Подтверждаем получение нажатия
 
     # Определяем, какая кнопка была нажата
-    if query.data.startswith(
-        "file_"
-    ):  # 📌 Проверяем, кликает ли пользователь на документ
-        await send_manual_by_callback(update, context)
-    elif query.data in ["engs_bot", "manuals_engrs"]:
+    if query.data in ["engs_bot", "manuals_engrs"]:
         await handle_callback_metod(update, context)  # Вызов выбора режима
     elif query.data.startswith("feedback_"):
         await handle_feedback_callback(update, context)  # Вызов обработки оценки
