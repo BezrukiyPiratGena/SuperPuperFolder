@@ -907,10 +907,6 @@ def normalize_mentions(gpt_response):
 
 # Метод для обработки сообщений в режиме мануалов
 async def handle_message_manuals(update: Update, context):
-    """
-    Метод обрабатывает поиск документов, теперь без ссылок, а с кнопками для скачивания.
-    """
-
     if context.user_data.get("last_selected_mode") != "manuals_engrs":
         logger.error("handle_message_manuals вызван вне режима мануалов.")
         return
@@ -933,41 +929,55 @@ async def handle_message_manuals(update: Update, context):
 
         # Формируем ответ пользователю
         response_text = "📚 Найденные документы по Вашему запросу:\n\n"
-        document_names = []  # Список названий мануалов
         keyboard_buttons = []  # Кнопки для инлайн-клавиатуры
         count_finds = 1
-        book1, book2, book3 = "📘", "📗", "📕"
+        book_icons = ["📘", "📗", "📕"]
+
+        # Получаем обратный словарь: filename -> file_id
+        filename_to_id = context.bot_data.get("filename_to_id", {})
 
         for filename, highlights, score in search_results:
-            book = [book1, book2, book3][count_finds % 3]
+            # Если ничего не найдено
+            if filename == "❌ Ничего не найдено":
+                response_text = "❌ По вашему запросу ничего не найдено в базе."
+                break
 
-            # response_text += f"{book} {count_finds} документ - {filename}\n"
-            document_names.append(filename)  # Добавляем в список названий
+            # Ищем ID по имени файла
+            file_id = filename_to_id.get(filename)
+            if not file_id:
+                # Если в таблице нет такого имени, можно пропустить или логировать
+                logger.warning(f"Файл '{filename}' не найден в словаре ID.")
+                continue
 
-            # 📌 Добавлена кнопка для запроса файла по callback
+            # Сокращаем название для кнопки, чтобы не было слишком длинным
+            short_display = filename
+            max_len = 40
+            if len(filename) > max_len:
+                short_display = filename[:max_len] + "..."
 
+            # Выбираем иконку
+            book_icon = book_icons[count_finds % 3]
+
+            # Создаём кнопку: текст короткий, в callback_data - ID
+            callback_data = f"file_{file_id}"
             keyboard_buttons.append(
                 [
                     InlineKeyboardButton(
-                        f"{book} {filename}", callback_data=f"file_{filename}"
+                        text=f"{book_icon} {short_display}", callback_data=callback_data
                     )
                 ]
             )
 
             count_finds += 1
 
-        # Если ничего не найдено
-        if len(search_results) == 1 and search_results[0][0] == "❌ Ничего не найдено":
-            response_text = "❌ По вашему запросу ничего не найдено в базе."
-
         # 📌 Вместо вставки ссылок теперь добавлены кнопки
         reply_markup = InlineKeyboardMarkup(keyboard_buttons)
         await update.message.reply_text(response_text, reply_markup=reply_markup)
 
-        # Запрос на оценку ответа
+        # Запрашиваем оценку
         await request_feedback(update, context)
 
-        # Сохраняем лог в MinIO
+        # Сохраняем лог
         log_filename = save_context_to_log(user_tag, response_text)
         logger.info(f"Контекст для {user_tag} сохранен в файл: {log_filename}")
 
@@ -1334,33 +1344,35 @@ async def request_feedback(update, context):
 
 
 async def send_manual_by_callback(update: Update, context):
-    """
-    Метод загружает и отправляет документ из MinIO по callback-запросу.
-    """
     query = update.callback_query
     await query.answer()  # Подтверждаем получение нажатия
 
-    filename = query.data.replace(
-        "file_", "", 1
-    )  # Убираем только первое вхождение "file_"
-    file_key = (
-        f"{MINIO_FOLDER_DOCS_NAME_MANUAL}/{filename}"  # 📌 Формируем путь в MinIO
-    )
+    file_id = query.data.replace("file_", "", 1)  # Убираем префикс "file_"
 
+    # Достаём словарь ID -> filename
+    manual_id_dict = context.bot_data.get("manual_id_dict", {})
+
+    # Находим настоящее название
+    real_filename = manual_id_dict.get(file_id)
+    if not real_filename:
+        await query.message.reply_text("❌ Не удалось найти файл по этому ID.")
+        return
+
+    file_key = f"{MINIO_FOLDER_DOCS_NAME_MANUAL}/{real_filename}"
     try:
         response = s3_client.get_object(Bucket=MINIO_BUCKET_NAME, Key=file_key)
         file_data = response["Body"].read()
 
         # 📌 Отправляем документ в чат
         await query.message.reply_document(
-            document=BytesIO(file_data), filename=filename
+            document=BytesIO(file_data), filename=real_filename
         )
-        logger.info(f"Файл {filename} успешно отправлен.")
+        logger.info(f"Файл {real_filename} (ID={file_id}) успешно отправлен.")
 
     except Exception as e:
-        logger.error(f"Ошибка при отправке файла {filename}: {e}")
+        logger.error(f"Ошибка при отправке файла {real_filename}: {e}")
         await query.message.reply_text(
-            f"❌ Ошибка при загрузке send_manual_by_callback {filename}."
+            f"❌ Ошибка при загрузке send_manual_by_callback {real_filename}."
         )
 
 
@@ -1566,15 +1578,29 @@ def load_manual_ids():
         return {}
 
 
+def build_filename_to_id_dict(id_to_filename: dict) -> dict:
+    """
+    Создаёт обратный словарь:
+    {
+       'NavMarine ECDIS SB 1.pdf': 'Ab1x9yZ0',
+       'MB-15G OMR.pdf': 'kjsdfh32',
+       ...
+    }
+    """
+    return {filename: file_id for file_id, filename in id_to_filename.items()}
+
+
 # Основная функция для запуска бота
 def main():
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     # Установка команд для меню
     # 1. Загрузим данные из листа "ID Мануалов" в словарь
     manual_id_dict = load_manual_ids()
-
     # 2. Сохраним его в bot_data (глобальные данные бота)
     application.bot_data["manual_id_dict"] = manual_id_dict
+
+    filename_to_id = build_filename_to_id_dict(manual_id_dict)
+    application.bot_data["filename_to_id"] = filename_to_id
 
     run_async_task(set_bot_commands(application))
 
