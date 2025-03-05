@@ -37,8 +37,6 @@ import warnings
 from openpyxl import load_workbook  # работа с xlsx
 from io import StringIO
 from io import BytesIO
-from flask import Flask, request
-from threading import Thread
 
 # Загрузка переменных окружения из файла .env
 load_dotenv("keys_google_sheet.env")
@@ -136,10 +134,6 @@ credentials = Credentials.from_service_account_info(
 client = gspread.authorize(credentials)
 sheet = client.open_by_key(SPREADSHEET_ID).sheet1
 logger.info("Подключение к MiniO начато")
-
-app = Flask(__name__)
-
-
 # Настройка MinIO клиента
 s3_client = boto3.client(
     "s3",
@@ -913,7 +907,10 @@ def normalize_mentions(gpt_response):
 
 # Метод для обработки сообщений в режиме мануалов
 async def handle_message_manuals(update: Update, context):
-    # print("Заработал режим handle_message_manuals")
+    """
+    Метод обрабатывает поиск документов, теперь без ссылок, а с кнопками для скачивания.
+    """
+
     if context.user_data.get("last_selected_mode") != "manuals_engrs":
         logger.error("handle_message_manuals вызван вне режима мануалов.")
         return
@@ -937,40 +934,38 @@ async def handle_message_manuals(update: Update, context):
         # Формируем ответ пользователю
         response_text = "📚 Найденные документы по Вашему запросу:\n\n"
         document_names = []  # Список названий мануалов
-        list_of_filenames = []  # Инициализируем список перед циклом
+        keyboard_buttons = []  # Кнопки для инлайн-клавиатуры
         count_finds = 1
-        book1 = "📗"
-        book2 = "📕"
-        book3 = "📘"
+        book1, book2, book3 = "📘", "📗", "📕"
 
         for filename, highlights, score in search_results:
-            if count_finds % 3 == 1:
-                book = book1
-            elif count_finds % 3 == 2:
-                book = book2
-            elif count_finds % 3 == 0:
-                book = book3
+            book = [book1, book2, book3][count_finds % 3]
 
-            response_text += f" {book} {count_finds} документ - {filename}\n"
-            # logger.info(
-            #    f" {book} {count_finds} Мануал - {filename}\n"
-            # )
+            # response_text += f"{book} {count_finds} документ - {filename}\n"
             document_names.append(filename)  # Добавляем в список названий
+
+            # 📌 Добавлена кнопка для запроса файла по callback
+
+            keyboard_buttons.append(
+                [
+                    InlineKeyboardButton(
+                        f"{book} {filename}", callback_data=f"file_{filename}"
+                    )
+                ]
+            )
+
             count_finds += 1
 
         # Если ничего не найдено
         if len(search_results) == 1 and search_results[0][0] == "❌ Ничего не найдено":
             response_text = "❌ По вашему запросу ничего не найдено в базе."
 
-        # Отправляем сообщение в Telegram
-        response_text_ready = format_document_links(
-            update, response_text, document_names
-        )
-        print(response_text_ready)
-        await send_large_message_for_manuals(update, response_text_ready)
+        # 📌 Вместо вставки ссылок теперь добавлены кнопки
+        reply_markup = InlineKeyboardMarkup(keyboard_buttons)
+        await update.message.reply_text(response_text, reply_markup=reply_markup)
+
+        # Запрос на оценку ответа
         await request_feedback(update, context)
-        # Теперь загружаем файлы из MinIO и отправляем в чат
-        # await send_manuals_from_minio(update, document_names)
 
         # Сохраняем лог в MinIO
         log_filename = save_context_to_log(user_tag, response_text)
@@ -983,41 +978,7 @@ async def handle_message_manuals(update: Update, context):
 
     except Exception as e:
         logger.error(f"Ошибка обработки сообщения в режиме мануалов: {e}")
-        await update.message.reply_text("Произошла ошибка при обработке запроса.")
-
-
-def format_document_links(update: Update, bot_reply, document_names):
-    """
-    Добавляет ссылки к каждому найденному документу.
-
-    Аргументы:
-        bot_reply (str): Исходный текст ответа бота.
-        document_names (list): Список названий документов.
-
-    Возвращает:
-        str: Отформатированный текст с добавленными ссылками.
-    """
-    user_id = update.message.from_user.id
-    print(f"user_id - {user_id}")
-
-    formatted_reply = []
-
-    for line in bot_reply.split("\n"):
-        found = False
-        for doc_name in document_names:
-            if doc_name in line:
-                doc_url = (
-                    f"http://localhost:8080/download?user_id={user_id}&file={doc_name}"
-                )
-                print(f"doc_name - {doc_name}")
-                formatted_reply.append(line)  # Оставляем название документа
-                formatted_reply.append(f"{doc_url}")  # Добавляем ссылку
-                found = True
-                break
-        if not found:
-            formatted_reply.append(line)
-
-    return "\n".join(formatted_reply)
+        await update.message.reply_text("❌ Ошибка при обработке запроса.")
 
 
 async def send_manuals_from_minio(update, document_names):
@@ -1050,7 +1011,9 @@ async def send_manuals_from_minio(update, document_names):
         except Exception as e:
             logger.error(f"Ошибка при отправке файла {filename}: {e}")
             if filename != "❌ Ничего не найдено":
-                await update.message.reply_text(f"❌ Ошибка при загрузке {filename}.")
+                await update.message.reply_text(
+                    f"❌ Ошибка при загрузке send_manual_from_minio {filename}."
+                )
 
 
 # Метод поиска упомянутых изображений по формату "Рисунок Х"
@@ -1178,38 +1141,39 @@ async def send_large_message(update, text, max_length=4000):
 
 
 async def send_large_message_for_manuals(update, text, max_length=4000):
-    """
-    Отправляет большие сообщения, разбивая их по 4000 символов.
-    """
+    # Разбиваем текст по абзацам
     paragraphs = text.split("\n\n")
     current_message = ""
 
-    html_tag_pattern = re.compile(r"<a href=.*?>.*?</a>")  # Проверка HTML-ссылок
-
     for paragraph in paragraphs:
+        # Проверяем, если текущий абзац слишком длинный, чтобы отправить его как есть
         if len(paragraph) > max_length:
-            if html_tag_pattern.search(paragraph):  # Если есть ссылка, не разрезаем
-                await update.message.reply_text(paragraph, parse_mode="HTML")
-                continue
-
+            # Если абзац превышает max_length, разбиваем его на подчасти
             sub_paragraphs = [
                 paragraph[i : i + max_length]
                 for i in range(0, len(paragraph), max_length)
             ]
             for sub_paragraph in sub_paragraphs:
-                await update.message.reply_text(sub_paragraph, parse_mode="HTML")
-            continue
+                await update.message.reply_text(sub_paragraph)
+                # await update.message.reply_text(sub_paragraph, parse_mode="HTML")
+            continue  # Переходим к следующему абзацу после отправки разбиения
 
+        # Проверяем, можно ли добавить текущий абзац в сообщение
         if len(current_message) + len(paragraph) + 2 <= max_length:
+            # Добавляем абзац в текущее сообщение
             if current_message:
                 current_message += "\n\n" + paragraph
             else:
                 current_message = paragraph
         else:
+            # Если текущее сообщение заполнено, отправляем его и начинаем новое
+            # await update.message.reply_text(current_message)
             await update.message.reply_text(current_message, parse_mode="HTML")
-            current_message = paragraph
+            current_message = paragraph  # Начинаем новое сообщение с текущего абзаца
 
+    # Отправляем оставшуюся часть сообщения, если что-то осталось
     if current_message:
+        # await update.message.reply_text(current_message)
         await update.message.reply_text(current_message, parse_mode="HTML")
 
 
@@ -1369,13 +1333,48 @@ async def request_feedback(update, context):
     context.user_data["awaiting_feedback"] = True  # Блокируем следующий вопрос
 
 
+async def send_manual_by_callback(update: Update, context):
+    """
+    Метод загружает и отправляет документ из MinIO по callback-запросу.
+    """
+    query = update.callback_query
+    await query.answer()  # Подтверждаем получение нажатия
+
+    filename = query.data.replace(
+        "file_", "", 1
+    )  # Убираем только первое вхождение "file_"
+    file_key = (
+        f"{MINIO_FOLDER_DOCS_NAME_MANUAL}/{filename}"  # 📌 Формируем путь в MinIO
+    )
+
+    try:
+        response = s3_client.get_object(Bucket=MINIO_BUCKET_NAME, Key=file_key)
+        file_data = response["Body"].read()
+
+        # 📌 Отправляем документ в чат
+        await query.message.reply_document(
+            document=BytesIO(file_data), filename=filename
+        )
+        logger.info(f"Файл {filename} успешно отправлен.")
+
+    except Exception as e:
+        logger.error(f"Ошибка при отправке файла {filename}: {e}")
+        await query.message.reply_text(
+            f"❌ Ошибка при загрузке send_manual_by_callback {filename}."
+        )
+
+
 async def handle_all_callbacks(update: Update, context):
     """Обрабатывает все CallbackQuery и перенаправляет в нужный обработчик."""
     query = update.callback_query
     await query.answer()  # Подтверждаем получение нажатия
 
     # Определяем, какая кнопка была нажата
-    if query.data in ["engs_bot", "manuals_engrs"]:
+    if query.data.startswith(
+        "file_"
+    ):  # 📌 Проверяем, кликает ли пользователь на документ
+        await send_manual_by_callback(update, context)
+    elif query.data in ["engs_bot", "manuals_engrs"]:
         await handle_callback_metod(update, context)  # Вызов выбора режима
     elif query.data.startswith("feedback_"):
         await handle_feedback_callback(update, context)  # Вызов обработки оценки
@@ -1527,10 +1526,56 @@ async def handle_message_async(update: Update, context):
     asyncio.create_task(handle_message(update, context))  # Запускаем как задачу
 
 
+def load_manual_ids():
+    """
+    Считывает лист 'ID Мануалов' из Google Sheets и возвращает словарь:
+    {
+      'id_из_столбца_A': 'оригинальное_название_из_столбца_B',
+      ...
+    }
+    """
+    try:
+        # Открываем таблицу по SPREADSHEET_ID
+        spreadsheet = client.open_by_key(SPREADSHEET_ID)
+        worksheet = spreadsheet.worksheet("ID Мануалов")
+
+        all_data = worksheet.get_all_values()  # Считываем все строки
+        if not all_data:
+            logger.warning("Лист 'ID Мануалов' пуст или не найден.")
+            return {}
+
+        manual_id_dict = {}
+
+        # Предположим, что первая строка — заголовок (A1='ID Мануала', B1='Название Мануала')
+        # Пропустим её и пойдём со второй строки
+        for row in all_data[1:]:
+            if len(row) < 2:
+                continue
+            file_id = row[0].strip()  # Столбец A
+            file_name = row[1].strip()  # Столбец B
+            if file_id and file_name:
+                manual_id_dict[file_id] = file_name
+
+        logger.info(
+            f"Успешно загружено {len(manual_id_dict)} записей из 'ID Мануалов'."
+        )
+        return manual_id_dict
+
+    except Exception as e:
+        logger.error(f"Ошибка при чтении листа 'ID Мануалов': {e}")
+        return {}
+
+
 # Основная функция для запуска бота
 def main():
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     # Установка команд для меню
+    # 1. Загрузим данные из листа "ID Мануалов" в словарь
+    manual_id_dict = load_manual_ids()
+
+    # 2. Сохраним его в bot_data (глобальные данные бота)
+    application.bot_data["manual_id_dict"] = manual_id_dict
+
     run_async_task(set_bot_commands(application))
 
     application.add_handler(CommandHandler("start", start))  # Обработка команды /start
@@ -1556,48 +1601,5 @@ def main():
     """
 
 
-app = Flask(__name__)
-
-
-@app.route("/download", methods=["GET"])
-def send_document():
-    """Обработчик для отправки файла по Telegram при нажатии на ссылку"""
-    user_id = request.args.get("user_id")  # ID пользователя из ссылки
-    file_name = request.args.get("file")  # Название файла
-    print(f"user_id- {user_id}")
-    print(f"file_name - {file_name}")
-
-    if not user_id or not file_name:
-        return "Ошибка: Неверные параметры запроса", 400
-
-    try:
-        # Загружаем файл из MinIO
-        file_key = f"{MINIO_FOLDER_DOCS_NAME_MANUAL}/{file_name}"
-        response = s3_client.get_object(Bucket=MINIO_BUCKET_NAME, Key=file_key)
-        file_data = response["Body"].read()
-
-        # Отправляем документ пользователю в Telegram
-        telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
-        requests.post(
-            telegram_url,
-            data={"chat_id": user_id},
-            files={"document": (file_name, BytesIO(file_data))},
-        )
-
-        return f"Файл {file_name} отправлен пользователю {user_id}!", 200
-
-    except Exception as e:
-        return f"Ошибка: {str(e)}", 500
-
-
-def run_flask():
-    """Функция для запуска Flask-сервера в отдельном потоке"""
-    app.run(host="0.0.0.0", port=8080, threaded=True)
-
-
 if __name__ == "__main__":
-    # Запускаем Flask-сервер в фоне
-    flask_thread = Thread(target=run_flask, daemon=True)
-    flask_thread.start()
-
-    main()  # Запускаем Telegram бота
+    main()
