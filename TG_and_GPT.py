@@ -1011,41 +1011,6 @@ async def handle_message_manuals(update: Update, context):
         await update.message.reply_text("❌ Ошибка при обработке запроса.")
 
 
-async def send_manuals_from_minio(update, document_names):
-    """
-    Загружает мануалы из MinIO и отправляет их в чат Telegram.
-    """
-    sent_files = set()  # Множество для отслеживания уже отправленных файлов
-
-    for filename in document_names:
-        file_key = f"{MINIO_FOLDER_DOCS_NAME_MANUAL}/{filename}"  # Формируем путь
-
-        # Проверяем, был ли файл уже отправлен
-        if file_key in sent_files:
-            continue
-
-        try:
-            # Запрашиваем файл из MinIO
-            response = s3_client.get_object(Bucket=MINIO_BUCKET_NAME, Key=file_key)
-            file_data = response["Body"].read()
-
-            # Отправляем файл пользователю в Telegram
-            await update.message.reply_document(
-                document=BytesIO(file_data), filename=filename
-            )
-
-            logger.info(f"Файл {filename} успешно отправлен.")
-
-            sent_files.add(file_key)  # Добавляем в список отправленных файлов
-
-        except Exception as e:
-            logger.error(f"Ошибка при отправке файла {filename}: {e}")
-            if filename != "❌ Ничего не найдено":
-                await update.message.reply_text(
-                    f"❌ Ошибка при загрузке send_manual_from_minio {filename}."
-                )
-
-
 # Метод поиска упомянутых изображений по формату "Рисунок Х"
 def search_by_figure_id(figure_id):
     collection = Collection(name=milvus_collection_name)
@@ -1383,17 +1348,23 @@ async def send_manual_by_callback(update: Update, context):
         response = s3_client.get_object(Bucket=MINIO_BUCKET_NAME, Key=file_key)
         file_data = response["Body"].read()
 
+        # 1. Отправляем пользователю «Загружается документ…»
+        loading_msg = await context.bot.send_message(
+            chat_id=update.effective_chat.id, text="Загружается документ..."
+        )
+
         # 📌 Отправляем документ в чат
         await query.message.reply_document(
             document=BytesIO(file_data), filename=real_filename
         )
         logger.info(f"Файл {real_filename} (ID={file_id}) успешно отправлен.")
 
+        # 3. Удаляем сообщение «Загружается...»
+        await loading_msg.delete()
+
     except Exception as e:
         logger.error(f"Ошибка при отправке файла {real_filename}: {e}")
-        await query.message.reply_text(
-            f"❌ Ошибка при загрузке send_manual_by_callback {real_filename}."
-        )
+        await query.message.reply_text(f"❌ Ошибка при загрузке {real_filename}.")
 
 
 async def handle_all_callbacks(update: Update, context):
