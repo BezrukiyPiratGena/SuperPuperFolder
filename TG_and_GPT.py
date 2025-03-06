@@ -484,18 +484,22 @@ def count_tokens(text):
 def save_user_question_to_sheet(
     user_message, gpt_response, user_tag, log_filename, handle_message_method
 ):
+    # Получаем текущую дату/время в удобном формате
+    current_datetime = datetime.now().strftime("%d.%m.%Y")
+
     next_row = len(sheet.get_all_values()) + 1  # Следующий номер строки
     sheet.update(
-        f"A{next_row}:G{next_row}",
+        f"A{next_row}:H{next_row}",
         [
             [
-                next_row - 1,
-                user_message,
-                gpt_response,
-                "",
-                user_tag,
-                log_filename,
-                handle_message_method,
+                next_row - 1,  # (A) — Номер записи/теста
+                user_message,  # (B) — Сообщение пользователя
+                gpt_response,  # (C) — Ответ бота
+                "",  # (D) — Оценка (пока пусто)
+                user_tag,  # (E) — Тег/ник
+                log_filename,  # (F) — Лог-файл
+                handle_message_method,  # (G) — Режим бота
+                current_datetime,  # (H) — Дата/время
             ]
         ],
     )  # Запись номера теста, вопроса, ответа GPT, оценки (пусто), и тега пользователя
@@ -1277,19 +1281,6 @@ def clear_message_bot():
             logger.info("Нет новых сообщений.")
     else:
         logger.info(f"Ошибка API Telegram: {response.status_code}, {response.text}")
-
-
-# Метод для получения описания (description) коллекции Milvus
-def get_collection_description(collection_name):
-    # logger.error(f"Вызвался метод get_collection_description!!!")
-    try:
-        collection = Collection(name=collection_name)
-        return collection.description  # Возвращаем описание коллекции
-    except Exception as e:
-        logger.error(
-            f"Не удалось получить описание для коллекции '{collection_name}': {e}"
-        )
-        return None
 
 
 async def set_bot_commands(application):
