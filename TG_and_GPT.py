@@ -598,7 +598,7 @@ def search_by_reference_in_milvus(reference_value):
 async def handle_message(update: Update, context):
     user_id = update.message.from_user.id
     last_selected_mode = load_user_mode_from_sheet(user_id)
-    # print("last_selected_mode", last_selected_mode)
+
     if last_selected_mode:
         context.user_data["last_selected_mode"] = last_selected_mode
     # Динамический вызов нужного метода обработки
@@ -614,14 +614,23 @@ async def handle_message(update: Update, context):
         await handle_message_manuals(update, context)
         return
 
-    user_id = update.message.from_user.id
-
     # Проверяем, ждет ли бот оценку
     if context.user_data.get("awaiting_feedback", False):
-        await update.message.reply_text(
-            "⚠️ Сначала оцените предыдущий ответ, прежде чем задать новый вопрос!"
-        )
-        return  # Блокируем новый вопрос
+        user_text = update.message.text.strip()
+
+        # Если пользователь ввёл секретное слово Alein, сбрасываем ожидание
+        if user_text == "Alein":
+            context.user_data["awaiting_feedback"] = False
+            await update.message.reply_text(
+                "Оценка пропущена. Теперь вы можете задать новый вопрос."
+            )
+        else:
+            # Если это не Alein, блокируем вопрос
+            await update.message.reply_text(
+                "⚠️ Сначала оцените предыдущий ответ, прежде чем задать новый вопрос!"
+            )
+
+        return  # Обязательно выходим, чтобы не обрабатывать дальше
 
     user_message2 = update.message.text
     user_message = replace_standart(user_message2)
@@ -915,10 +924,21 @@ async def handle_message_manuals(update: Update, context):
 
     # Проверяем, ждет ли бот оценку
     if context.user_data.get("awaiting_feedback", False):
-        await update.message.reply_text(
-            "⚠️ Сначала оцените предыдущий ответ, прежде чем задать новый вопрос!"
-        )
-        return  # Блокируем новый вопрос
+        user_text = update.message.text.strip()
+
+        # Если пользователь ввёл секретное слово Alein, сбрасываем ожидание
+        if user_text == "Alein":
+            context.user_data["awaiting_feedback"] = False
+            await update.message.reply_text(
+                "Оценка пропущена. Теперь вы можете задать новый вопрос."
+            )
+        else:
+            # Если это не Alein, блокируем вопрос
+            await update.message.reply_text(
+                "⚠️ Сначала оцените предыдущий ответ, прежде чем задать новый вопрос!"
+            )
+
+        return  # Обязательно выходим, чтобы не обрабатывать дальше
 
     user_message = update.message.text
     user_tag = update.message.from_user.username or update.message.from_user.full_name
