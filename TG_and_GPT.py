@@ -106,7 +106,7 @@ google_credentials = {  # Тут все ключи для работы API от 
 }
 
 URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
-firts_message_from_tg_bot = "Привет!🖐 Я асистент для инженеров, перед тем как задать мне вопрос, выбери режим работы через команду '/metod'"
+firts_message_from_tg_bot = "Привет!🖐 Я ассистент для инженеров, перед тем как задать мне вопрос, выбери режим работы через команду '/metod'"
 
 minio_folder_docs_name = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK
 milvus_collection_name = MILVUS_COLLECTION
@@ -291,6 +291,36 @@ def find_most_similar(query_embedding, top_n=15):
     return filtered_texts, filtered_refs, filtered_related_tables
 
 
+def generate_query_variants(user_query: str) -> list:
+    """
+    Генерирует список вариантов строки user_query:
+    - оригинал
+    - заменяем '-' на пробелы
+    - убираем '-' совсем
+
+    При желании можно расширить:
+    - убрать пробелы
+    - заменить пробелы на '-'
+    - и т.д.
+    """
+    variants = set()  # set, чтобы избежать дубликатов
+
+    original = user_query.strip()
+    variants.add(original)
+
+    # Если есть дефис, добавляем варианты
+    if "-" in original:
+        variants.add(original.replace("-", ""))  # убрать дефис
+        variants.add(original.replace("-", " "))  # заменить дефис на пробел
+
+    # Если есть пробел, добавляем варианты
+    if " " in original:
+        variants.add(original.replace(" ", ""))  # убрать пробел
+        variants.add(original.replace(" ", "-"))  # заменить пробел на дефис
+
+    return list(variants)
+
+
 def search_in_elasticsearch(user_query, top_n):
     """
     Выполняет поиск в Elasticsearch по ключевому слову или фразе и считает
@@ -303,11 +333,19 @@ def search_in_elasticsearch(user_query, top_n):
     Возвращает:
         list: [(имя файла, найденные фрагменты, точное количество вхождений)]
     """
+    # 1. Генерируем варианты запроса на основе user_query
+    variants = generate_query_variants(user_query)
+
+    # Собираем список условий 'should' по match_phrase для каждого варианта
+    should_clauses = []
+    for variant in variants:
+        should_clauses.append({"match_phrase": {"attachment.content": variant}})
+
     # Формируем поисковый запрос
     query = {
         "size": top_n,
         "_source": ["filename", "attachment.content"],  # Запрашиваемые поля
-        "query": {"match_phrase": {"attachment.content": user_query}},
+        "query": {"bool": {"should": should_clauses, "minimum_should_match": 1}},
         "highlight": {
             "fields": {
                 "attachment.content": {
@@ -317,9 +355,9 @@ def search_in_elasticsearch(user_query, top_n):
             }
         },
     }
-
+    print(variants)
     try:
-        # Отправляем запрос в Elasticsearch
+        # 3. Отправляем запрос в Elasticsearch
         response = requests.get(
             ELASTIC_URL,
             headers=HEADERS,
@@ -753,7 +791,7 @@ async def handle_message(update: Update, context):
                 {
                     "role": "system",
                     "content": (
-                        "Я хочу, чтобы ты выступил в роли асистента-помощника для инженеров. "
+                        "Я хочу, чтобы ты выступил в роли ассистента-помощника для инженеров. "
                         "Твоя основная задача - отвечать на вопросы, анализируя предоставленные данные, без выдумывания информации. Если нужной информации нет, просто скажи, что не можешь ответить на вопрос, так как данных недостаточно."
                         ""
                         "Примечания к контексту:"
@@ -975,7 +1013,7 @@ async def handle_message_manuals(update: Update, context):
 
             # Сокращаем название для кнопки, чтобы не было слишком длинным
             short_display = filename
-            max_len = 40
+            max_len = 30
             if len(filename) > max_len:
                 short_display = filename[:max_len] + "..."
 
@@ -1377,7 +1415,7 @@ async def handle_all_callbacks(update: Update, context):
 
 
 async def handle_feedback_callback(update: Update, context):
-    print("вызван метод handle_feedback_callback")
+    # print("вызван метод handle_feedback_callback")
     """Обрабатывает нажатие на кнопки оценки ответа."""
 
     query = update.callback_query

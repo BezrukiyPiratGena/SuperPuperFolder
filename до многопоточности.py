@@ -291,6 +291,36 @@ def find_most_similar(query_embedding, top_n=15):
     return filtered_texts, filtered_refs, filtered_related_tables
 
 
+def generate_query_variants(user_query: str) -> list:
+    """
+    Генерирует список вариантов строки user_query:
+    - оригинал
+    - заменяем '-' на пробелы
+    - убираем '-' совсем
+
+    При желании можно расширить:
+    - убрать пробелы
+    - заменить пробелы на '-'
+    - и т.д.
+    """
+    variants = set()  # set, чтобы избежать дубликатов
+
+    original = user_query.strip()
+    variants.add(original)
+
+    # Если есть дефис, добавляем варианты
+    if "-" in original:
+        variants.add(original.replace("-", ""))  # убрать дефис
+        variants.add(original.replace("-", " "))  # заменить дефис на пробел
+
+    # Если есть пробел, добавляем варианты
+    if " " in original:
+        variants.add(original.replace(" ", ""))  # убрать пробел
+        variants.add(original.replace(" ", "-"))  # заменить пробел на дефис
+
+    return list(variants)
+
+
 def search_in_elasticsearch(user_query, top_n):
     """
     Выполняет поиск в Elasticsearch по ключевому слову или фразе и считает
@@ -303,11 +333,19 @@ def search_in_elasticsearch(user_query, top_n):
     Возвращает:
         list: [(имя файла, найденные фрагменты, точное количество вхождений)]
     """
+    # 1. Генерируем варианты запроса на основе user_query
+    variants = generate_query_variants(user_query)
+
+    # Собираем список условий 'should' по match_phrase для каждого варианта
+    should_clauses = []
+    for variant in variants:
+        should_clauses.append({"match_phrase": {"attachment.content": variant}})
+
     # Формируем поисковый запрос
     query = {
         "size": top_n,
         "_source": ["filename", "attachment.content"],  # Запрашиваемые поля
-        "query": {"match_phrase": {"attachment.content": user_query}},
+        "query": {"bool": {"should": should_clauses, "minimum_should_match": 1}},
         "highlight": {
             "fields": {
                 "attachment.content": {
@@ -317,9 +355,9 @@ def search_in_elasticsearch(user_query, top_n):
             }
         },
     }
-
+    print(variants)
     try:
-        # Отправляем запрос в Elasticsearch
+        # 3. Отправляем запрос в Elasticsearch
         response = requests.get(
             ELASTIC_URL,
             headers=HEADERS,
@@ -484,18 +522,22 @@ def count_tokens(text):
 def save_user_question_to_sheet(
     user_message, gpt_response, user_tag, log_filename, handle_message_method
 ):
+    # Получаем текущую дату/время в удобном формате
+    current_datetime = datetime.now().strftime("%d.%m.%Y")
+
     next_row = len(sheet.get_all_values()) + 1  # Следующий номер строки
     sheet.update(
-        f"A{next_row}:G{next_row}",
+        f"A{next_row}:H{next_row}",
         [
             [
-                next_row - 1,
-                user_message,
-                gpt_response,
-                "",
-                user_tag,
-                log_filename,
-                handle_message_method,
+                next_row - 1,  # (A) — Номер записи/теста
+                user_message,  # (B) — Сообщение пользователя
+                gpt_response,  # (C) — Ответ бота
+                "",  # (D) — Оценка (пока пусто)
+                user_tag,  # (E) — Тег/ник
+                log_filename,  # (F) — Лог-файл
+                handle_message_method,  # (G) — Режим бота
+                current_datetime,  # (H) — Дата/время
             ]
         ],
     )  # Запись номера теста, вопроса, ответа GPT, оценки (пусто), и тега пользователя
@@ -598,7 +640,7 @@ def search_by_reference_in_milvus(reference_value):
 async def handle_message(update: Update, context):
     user_id = update.message.from_user.id
     last_selected_mode = load_user_mode_from_sheet(user_id)
-    # print("last_selected_mode", last_selected_mode)
+
     if last_selected_mode:
         context.user_data["last_selected_mode"] = last_selected_mode
     # Динамический вызов нужного метода обработки
@@ -614,14 +656,23 @@ async def handle_message(update: Update, context):
         await handle_message_manuals(update, context)
         return
 
-    user_id = update.message.from_user.id
-
     # Проверяем, ждет ли бот оценку
     if context.user_data.get("awaiting_feedback", False):
-        await update.message.reply_text(
-            "⚠️ Сначала оцените предыдущий ответ, прежде чем задать новый вопрос!"
-        )
-        return  # Блокируем новый вопрос
+        user_text = update.message.text.strip()
+
+        # Если пользователь ввёл секретное слово Alein, сбрасываем ожидание
+        if user_text == "Alein":
+            context.user_data["awaiting_feedback"] = False
+            await update.message.reply_text(
+                "Оценка пропущена. Теперь вы можете задать новый вопрос."
+            )
+        else:
+            # Если это не Alein, блокируем вопрос
+            await update.message.reply_text(
+                "⚠️ Сначала оцените предыдущий ответ, прежде чем задать новый вопрос!"
+            )
+
+        return  # Обязательно выходим, чтобы не обрабатывать дальше
 
     user_message2 = update.message.text
     user_message = replace_standart(user_message2)
@@ -907,10 +958,6 @@ def normalize_mentions(gpt_response):
 
 # Метод для обработки сообщений в режиме мануалов
 async def handle_message_manuals(update: Update, context):
-    """
-    Метод обрабатывает поиск документов, теперь без ссылок, а с кнопками для скачивания.
-    """
-
     if context.user_data.get("last_selected_mode") != "manuals_engrs":
         logger.error("handle_message_manuals вызван вне режима мануалов.")
         return
@@ -919,10 +966,21 @@ async def handle_message_manuals(update: Update, context):
 
     # Проверяем, ждет ли бот оценку
     if context.user_data.get("awaiting_feedback", False):
-        await update.message.reply_text(
-            "⚠️ Сначала оцените предыдущий ответ, прежде чем задать новый вопрос!"
-        )
-        return  # Блокируем новый вопрос
+        user_text = update.message.text.strip()
+
+        # Если пользователь ввёл секретное слово Alein, сбрасываем ожидание
+        if user_text == "Alein":
+            context.user_data["awaiting_feedback"] = False
+            await update.message.reply_text(
+                "Оценка пропущена. Теперь вы можете задать новый вопрос."
+            )
+        else:
+            # Если это не Alein, блокируем вопрос
+            await update.message.reply_text(
+                "⚠️ Сначала оцените предыдущий ответ, прежде чем задать новый вопрос!"
+            )
+
+        return  # Обязательно выходим, чтобы не обрабатывать дальше
 
     user_message = update.message.text
     user_tag = update.message.from_user.username or update.message.from_user.full_name
@@ -933,43 +991,55 @@ async def handle_message_manuals(update: Update, context):
 
         # Формируем ответ пользователю
         response_text = "📚 Найденные документы по Вашему запросу:\n\n"
-        document_names = []  # Список названий мануалов
         keyboard_buttons = []  # Кнопки для инлайн-клавиатуры
         count_finds = 1
-        book1, book2, book3 = "📗", "📕", "📘"
+        book_icons = ["📘", "📗", "📕"]
+
+        # Получаем обратный словарь: filename -> file_id
+        filename_to_id = context.bot_data.get("filename_to_id", {})
 
         for filename, highlights, score in search_results:
-            book = [book1, book2, book3][count_finds % 3]
+            # Если ничего не найдено
+            if filename == "❌ Ничего не найдено":
+                response_text = "❌ По вашему запросу ничего не найдено в базе."
+                break
 
-            # response_text += f"{book} {count_finds} документ - {filename}\n"
-            document_names.append(filename)  # Добавляем в список названий
+            # Ищем ID по имени файла
+            file_id = filename_to_id.get(filename)
+            if not file_id:
+                # Если в таблице нет такого имени, можно пропустить или логировать
+                logger.warning(f"Файл '{filename}' не найден в словаре ID.")
+                continue
 
-            # 📌 Добавлена кнопка для запроса файла по callback
-            safe_filename = re.sub(r"[^a-zA-Z0-9_-]", "_", filename)[
-                :60
-            ]  # Убираем запрещенные символы и ограничиваем длину
+            # Сокращаем название для кнопки, чтобы не было слишком длинным
+            short_display = filename
+            max_len = 40
+            if len(filename) > max_len:
+                short_display = filename[:max_len] + "..."
+
+            # Выбираем иконку
+            book_icon = book_icons[count_finds % 3]
+
+            # Создаём кнопку: текст короткий, в callback_data - ID
+            callback_data = f"file_{file_id}"
             keyboard_buttons.append(
                 [
                     InlineKeyboardButton(
-                        f"{book} {filename}", callback_data=f"file_{safe_filename}"
+                        text=f"{book_icon} {short_display}", callback_data=callback_data
                     )
                 ]
             )
 
             count_finds += 1
 
-        # Если ничего не найдено
-        if len(search_results) == 1 and search_results[0][0] == "❌ Ничего не найдено":
-            response_text = "❌ По вашему запросу ничего не найдено в базе."
-
         # 📌 Вместо вставки ссылок теперь добавлены кнопки
         reply_markup = InlineKeyboardMarkup(keyboard_buttons)
         await update.message.reply_text(response_text, reply_markup=reply_markup)
 
-        # Запрос на оценку ответа
+        # Запрашиваем оценку
         await request_feedback(update, context)
 
-        # Сохраняем лог в MinIO
+        # Сохраняем лог
         log_filename = save_context_to_log(user_tag, response_text)
         logger.info(f"Контекст для {user_tag} сохранен в файл: {log_filename}")
 
@@ -981,69 +1051,6 @@ async def handle_message_manuals(update: Update, context):
     except Exception as e:
         logger.error(f"Ошибка обработки сообщения в режиме мануалов: {e}")
         await update.message.reply_text("❌ Ошибка при обработке запроса.")
-
-
-def format_document_links(bot_reply, document_names):
-    """
-    Форматирует текст ответа, добавляя кликабельные ссылки на документы.
-
-    Аргументы:
-        bot_reply (str): Исходный текст ответа бота.
-        document_names (list): Список названий документов.
-        minio_endpoint (str): URL MinIO.
-        minio_bucket (str): Название бакета в MinIO.
-
-    Возвращает:
-        str: Отформатированный текст с кликабельными ссылками.
-    """
-    for doc_name in document_names:
-        # Формируем URL документа
-        doc_url = f"{MINIO_ENDPOINT}/{MINIO_BUCKET_NAME}/{MINIO_FOLDER_DOCS_NAME_MANUAL}/{doc_name}"
-
-        # Создаем HTML-ссылку
-        link_text = f'<a href="{doc_url}" target="_blank">{doc_name}</a>'
-
-        # Заменяем название документа на ссылку в тексте ответа
-        bot_reply = re.sub(
-            rf"\b{re.escape(doc_name)}\b",  # Ищем точное совпадение
-            link_text,
-            bot_reply,
-        )
-
-    return bot_reply
-
-
-async def send_manuals_from_minio(update, document_names):
-    """
-    Загружает мануалы из MinIO и отправляет их в чат Telegram.
-    """
-    sent_files = set()  # Множество для отслеживания уже отправленных файлов
-
-    for filename in document_names:
-        file_key = f"{MINIO_FOLDER_DOCS_NAME_MANUAL}/{filename}"  # Формируем путь
-
-        # Проверяем, был ли файл уже отправлен
-        if file_key in sent_files:
-            continue
-
-        try:
-            # Запрашиваем файл из MinIO
-            response = s3_client.get_object(Bucket=MINIO_BUCKET_NAME, Key=file_key)
-            file_data = response["Body"].read()
-
-            # Отправляем файл пользователю в Telegram
-            await update.message.reply_document(
-                document=BytesIO(file_data), filename=filename
-            )
-
-            logger.info(f"Файл {filename} успешно отправлен.")
-
-            sent_files.add(file_key)  # Добавляем в список отправленных файлов
-
-        except Exception as e:
-            logger.error(f"Ошибка при отправке файла {filename}: {e}")
-            if filename != "❌ Ничего не найдено":
-                await update.message.reply_text(f"❌ Ошибка при загрузке {filename}.")
 
 
 # Метод поиска упомянутых изображений по формату "Рисунок Х"
@@ -1314,19 +1321,6 @@ def clear_message_bot():
         logger.info(f"Ошибка API Telegram: {response.status_code}, {response.text}")
 
 
-# Метод для получения описания (description) коллекции Milvus
-def get_collection_description(collection_name):
-    # logger.error(f"Вызвался метод get_collection_description!!!")
-    try:
-        collection = Collection(name=collection_name)
-        return collection.description  # Возвращаем описание коллекции
-    except Exception as e:
-        logger.error(
-            f"Не удалось получить описание для коллекции '{collection_name}': {e}"
-        )
-        return None
-
-
 async def set_bot_commands(application):
     """
     Устанавливает меню команд для Telegram-бота.
@@ -1364,32 +1358,42 @@ async def request_feedback(update, context):
 
 
 async def send_manual_by_callback(update: Update, context):
-    """
-    Метод загружает и отправляет документ из MinIO по callback-запросу.
-    """
     query = update.callback_query
     await query.answer()  # Подтверждаем получение нажатия
 
-    filename = query.data.replace(
-        "file_", "", 1
-    )  # Убираем только первое вхождение "file_"
-    file_key = (
-        f"{MINIO_FOLDER_DOCS_NAME_MANUAL}/{filename}"  # 📌 Формируем путь в MinIO
-    )
+    file_id = query.data.replace("file_", "", 1)  # Убираем префикс "file_"
 
+    # Достаём словарь ID -> filename
+    manual_id_dict = context.bot_data.get("manual_id_dict", {})
+
+    # Находим настоящее название
+    real_filename = manual_id_dict.get(file_id)
+    if not real_filename:
+        await query.message.reply_text("❌ Не удалось найти файл по этому ID.")
+        return
+
+    file_key = f"{MINIO_FOLDER_DOCS_NAME_MANUAL}/{real_filename}"
     try:
         response = s3_client.get_object(Bucket=MINIO_BUCKET_NAME, Key=file_key)
         file_data = response["Body"].read()
 
+        # 1. Отправляем пользователю «Загружается документ…»
+        loading_msg = await context.bot.send_message(
+            chat_id=update.effective_chat.id, text="Загружается документ..."
+        )
+
         # 📌 Отправляем документ в чат
         await query.message.reply_document(
-            document=BytesIO(file_data), filename=filename
+            document=BytesIO(file_data), filename=real_filename
         )
-        logger.info(f"Файл {filename} успешно отправлен.")
+        logger.info(f"Файл {real_filename} (ID={file_id}) успешно отправлен.")
+
+        # 3. Удаляем сообщение «Загружается...»
+        await loading_msg.delete()
 
     except Exception as e:
-        logger.error(f"Ошибка при отправке файла {filename}: {e}")
-        await query.message.reply_text(f"❌ Ошибка при загрузке {filename}.")
+        logger.error(f"Ошибка при отправке файла {real_filename}: {e}")
+        await query.message.reply_text(f"❌ Ошибка при загрузке {real_filename}.")
 
 
 async def handle_all_callbacks(update: Update, context):
@@ -1554,10 +1558,70 @@ async def handle_message_async(update: Update, context):
     asyncio.create_task(handle_message(update, context))  # Запускаем как задачу
 
 
+def load_manual_ids():
+    """
+    Считывает лист 'ID Мануалов' из Google Sheets и возвращает словарь:
+    {
+      'id_из_столбца_A': 'оригинальное_название_из_столбца_B',
+      ...
+    }
+    """
+    try:
+        # Открываем таблицу по SPREADSHEET_ID
+        spreadsheet = client.open_by_key(SPREADSHEET_ID)
+        worksheet = spreadsheet.worksheet("ID Мануалов")
+
+        all_data = worksheet.get_all_values()  # Считываем все строки
+        if not all_data:
+            logger.warning("Лист 'ID Мануалов' пуст или не найден.")
+            return {}
+
+        manual_id_dict = {}
+
+        # Предположим, что первая строка — заголовок (A1='ID Мануала', B1='Название Мануала')
+        # Пропустим её и пойдём со второй строки
+        for row in all_data[1:]:
+            if len(row) < 2:
+                continue
+            file_id = row[0].strip()  # Столбец A
+            file_name = row[1].strip()  # Столбец B
+            if file_id and file_name:
+                manual_id_dict[file_id] = file_name
+
+        logger.info(
+            f"Успешно загружено {len(manual_id_dict)} записей из 'ID Мануалов'."
+        )
+        return manual_id_dict
+
+    except Exception as e:
+        logger.error(f"Ошибка при чтении листа 'ID Мануалов': {e}")
+        return {}
+
+
+def build_filename_to_id_dict(id_to_filename: dict) -> dict:
+    """
+    Создаёт обратный словарь:
+    {
+       'NavMarine ECDIS SB 1.pdf': 'Ab1x9yZ0',
+       'MB-15G OMR.pdf': 'kjsdfh32',
+       ...
+    }
+    """
+    return {filename: file_id for file_id, filename in id_to_filename.items()}
+
+
 # Основная функция для запуска бота
 def main():
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     # Установка команд для меню
+    # 1. Загрузим данные из листа "ID Мануалов" в словарь
+    manual_id_dict = load_manual_ids()
+    # 2. Сохраним его в bot_data (глобальные данные бота)
+    application.bot_data["manual_id_dict"] = manual_id_dict
+
+    filename_to_id = build_filename_to_id_dict(manual_id_dict)
+    application.bot_data["filename_to_id"] = filename_to_id
+
     run_async_task(set_bot_commands(application))
 
     application.add_handler(CommandHandler("start", start))  # Обработка команды /start
