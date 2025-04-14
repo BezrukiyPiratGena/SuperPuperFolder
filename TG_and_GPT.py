@@ -413,6 +413,7 @@ def search_in_elasticsearch(user_query, top_n):
 
         if response.status_code == 200:
             result = response.json()
+            print(f"result - {result}")
             hits = result.get("hits", {}).get("hits", [])
 
             if hits:
@@ -1074,11 +1075,13 @@ async def handle_message_manuals(update: Update, context):
                     )
                 ]
             )
+            response_text = f"{response_text} \n {book_icon} {short_display}"
 
             count_finds += 1
 
         # 📌 Вместо вставки ссылок теперь добавлены кнопки
         reply_markup = InlineKeyboardMarkup(keyboard_buttons)
+
         await update.message.reply_text(response_text, reply_markup=reply_markup)
 
         # Запрашиваем оценку
