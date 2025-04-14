@@ -37,6 +37,7 @@ import warnings
 from openpyxl import load_workbook  # работа с xlsx
 from io import StringIO
 from io import BytesIO
+from itertools import product
 
 # Загрузка переменных окружения из файла .env
 load_dotenv("keys_google_sheet.env")
@@ -132,7 +133,7 @@ credentials = Credentials.from_service_account_info(
     google_credentials, scopes=["https://www.googleapis.com/auth/spreadsheets"]
 )
 client = gspread.authorize(credentials)
-sheet = client.open_by_key(SPREADSHEET_ID).sheet1
+sheet = client.open_by_key(SPREADSHEET_ID).worksheet("Логи инженеров прод1.0")
 logger.info("Подключение к MiniO начато")
 # Настройка MinIO клиента
 s3_client = boto3.client(
@@ -291,34 +292,78 @@ def find_most_similar(query_embedding, top_n=15):
     return filtered_texts, filtered_refs, filtered_related_tables
 
 
-def generate_query_variants(user_query: str) -> list:
+def generate_all_variants(user_query: str) -> list:
     """
-    Генерирует список вариантов строки user_query:
-    - оригинал
-    - заменяем '-' на пробелы
-    - убираем '-' совсем
+    Объединяет два вида генерации вариантов:
+      1) Простейшие замены пробелов и дефисов (generate_query_variants).
+      2) Подмена двусмысленных букв (латиница <-> кириллица) (generate_query_variants2).
 
-    При желании можно расширить:
-    - убрать пробелы
-    - заменить пробелы на '-'
-    - и т.д.
+    Аргументы:
+        user_query (str): Исходная строка (запрос).
+
+    Возвращает:
+        list: Список уникальных вариантов строки.
     """
-    variants = set()  # set, чтобы избежать дубликатов
+    # --- 1) Генерация «простых» вариантов (дефисы, пробелы) ---
+    base_variants = set()
 
     original = user_query.strip()
-    variants.add(original)
+    base_variants.add(original)
 
     # Если есть дефис, добавляем варианты
     if "-" in original:
-        variants.add(original.replace("-", ""))  # убрать дефис
-        variants.add(original.replace("-", " "))  # заменить дефис на пробел
+        base_variants.add(original.replace("-", ""))  # убрать дефис
+        base_variants.add(original.replace("-", " "))  # заменить дефис на пробел
 
     # Если есть пробел, добавляем варианты
     if " " in original:
-        variants.add(original.replace(" ", ""))  # убрать пробел
-        variants.add(original.replace(" ", "-"))  # заменить пробел на дефис
+        base_variants.add(original.replace(" ", ""))  # убрать пробел
+        base_variants.add(original.replace(" ", "-"))  # заменить пробел на дефис
 
-    return list(variants)
+    # --- 2) Подмена латиницы/кириллицы для каждого варианта из base_variants ---
+    mapping = {
+        "A": ["A", "А"],
+        "a": ["a", "а"],
+        "B": ["B", "В"],
+        "b": ["b", "в"],
+        "C": ["C", "С"],
+        "c": ["c", "с"],
+        "E": ["E", "Е"],
+        "e": ["e", "е"],
+        "H": ["H", "Н"],
+        "h": ["h", "н"],
+        "K": ["K", "К"],
+        "k": ["k", "к"],
+        "M": ["M", "М"],
+        "m": ["m", "м"],
+        "O": ["O", "О"],
+        "o": ["o", "о"],
+        "P": ["P", "Р"],
+        "p": ["p", "р"],
+        "T": ["T", "Т"],
+        "t": ["t", "т"],
+        "X": ["X", "Х"],
+        "x": ["x", "х"],
+        "Y": ["Y", "У"],
+        "y": ["y", "у"],
+    }
+
+    all_variants = set()
+
+    for variant in base_variants:
+        # Собираем варианты для каждой буквы
+        char_options = []
+        for char in variant:
+            if char in mapping:
+                char_options.append(mapping[char])
+            else:
+                char_options.append([char])
+
+        # Перебираем все комбинации (product)
+        for combo in product(*char_options):
+            all_variants.add("".join(combo))
+
+    return list(all_variants)
 
 
 def search_in_elasticsearch(user_query, top_n):
@@ -334,7 +379,7 @@ def search_in_elasticsearch(user_query, top_n):
         list: [(имя файла, найденные фрагменты, точное количество вхождений)]
     """
     # 1. Генерируем варианты запроса на основе user_query
-    variants = generate_query_variants(user_query)
+    variants = generate_all_variants(user_query)
 
     # Собираем список условий 'should' по match_phrase для каждого варианта
     should_clauses = []
@@ -349,7 +394,7 @@ def search_in_elasticsearch(user_query, top_n):
         "highlight": {
             "fields": {
                 "attachment.content": {
-                    "fragment_size": 150,  # Увеличили размер фрагмента
+                    "fragment_size": 20,  # Увеличили размер фрагмента
                     "number_of_fragments": 10,
                 }
             }
@@ -1013,7 +1058,7 @@ async def handle_message_manuals(update: Update, context):
 
             # Сокращаем название для кнопки, чтобы не было слишком длинным
             short_display = filename
-            max_len = 30
+            max_len = 40
             if len(filename) > max_len:
                 short_display = filename[:max_len] + "..."
 
