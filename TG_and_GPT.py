@@ -384,23 +384,25 @@ def search_in_elasticsearch(user_query, top_n):
     # Собираем список условий 'should' по match_phrase для каждого варианта
     should_clauses = []
     for variant in variants:
-        should_clauses.append({"match_phrase": {"attachment.content": variant}})
+        should_clauses.append(
+            {"match_phrase": {"extracted_attachment.content": variant}}
+        )
 
     # Формируем поисковый запрос
     query = {
-        "size": top_n,
-        "_source": ["filename", "attachment.content"],  # Запрашиваемые поля
-        "query": {"bool": {"should": should_clauses, "minimum_should_match": 1}},
+        "size": 10,
+        "_source": ["filename"],
+        "query": {
+            "wildcard": {"attachment.content.keyword": {"value": f"*{user_query}???*"}}
+        },
         "highlight": {
             "fields": {
-                "attachment.content": {
-                    "fragment_size": 20,  # Увеличили размер фрагмента
-                    "number_of_fragments": 10,
-                }
+                "attachment.content": {"fragment_size": 20, "number_of_fragments": 10}
             }
         },
     }
     print(variants)
+    print(f"query - {query}")
     try:
         # 3. Отправляем запрос в Elasticsearch
         response = requests.get(
@@ -861,7 +863,7 @@ async def handle_message(update: Update, context):
                         ""
                         "Если пользователь запрашивает таблицу (например, 'Таблица Х' или 'Таблица Х полностью' или 'Что находится в Таблице Х', 'Что в Таблице Х')"
                         "ты должен сообщить, что Таблица Х (название) есть в БД, без вывода содержимого таблицы. не говори, что ты не можешь предоставить ее содержимое"
-                        "Не отвеча 'Не могу ответить на вопрос, так как данных недостаточно', вместо этого отвечай, что 'Информации не найдено в справочнике'"
+                        "Не отвеча 'Не могу ответить на вопрос, так как данных недостаточно', вместо этого отвечай, что 'Информации не найдено в справочнике, возможно информация есть в режиме 'Поиск мануалов'/metod'"
                         ""
                         # "Если встречаешь название модели, которое может быть переведено с русского на английский (или наоборот), старайся определить наиболее точное соответствие."
                     ),
@@ -1047,7 +1049,7 @@ async def handle_message_manuals(update: Update, context):
         for filename, highlights, score in search_results:
             # Если ничего не найдено
             if filename == "❌ Ничего не найдено":
-                response_text = "❌ По вашему запросу ничего не найдено в базе."
+                response_text = f'❌ По вашему запросу ничего не найдено в базе.\nВоможно информация есть в режиме "Поиск по справочнику /metod"'
                 break
 
             # Ищем ID по имени файла
