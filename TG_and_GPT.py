@@ -393,7 +393,17 @@ def search_in_elasticsearch(user_query, top_n):
         "size": 10,
         "_source": ["filename"],
         "query": {
-            "wildcard": {"attachment.content.keyword": {"value": f"*{user_query}???*"}}
+            "bool": {
+                "should": [
+                    {
+                        "wildcard": {
+                            "attachment.content.keyword": {"value": f"*{variant}*"}
+                        }
+                    }
+                    for variant in variants  # <-- итерируемся по списку строк!
+                ],
+                "minimum_should_match": 1,
+            }
         },
         "highlight": {
             "fields": {
@@ -401,8 +411,8 @@ def search_in_elasticsearch(user_query, top_n):
             }
         },
     }
-    print(variants)
-    print(f"query - {query}")
+    # print(variants)
+    # print(f"query - {query}")
     try:
         # 3. Отправляем запрос в Elasticsearch
         response = requests.get(
@@ -1077,7 +1087,8 @@ async def handle_message_manuals(update: Update, context):
                     )
                 ]
             )
-            response_text = f"{response_text} \n {book_icon} {short_display}"
+            response_text = f"{response_text}"
+            response_text_to_sheet = f"{response_text} \n {book_icon} {short_display}"
 
             count_finds += 1
 
@@ -1095,7 +1106,11 @@ async def handle_message_manuals(update: Update, context):
 
         # Логируем в Google Таблицу
         save_user_question_to_sheet(
-            user_message, response_text, user_tag, log_filename, "Режим Мануалов"
+            user_message,
+            response_text_to_sheet,
+            user_tag,
+            log_filename,
+            "Режим Мануалов",
         )
 
     except Exception as e:
