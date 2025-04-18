@@ -3,6 +3,7 @@ from ctypes import alignment
 from openpyxl.styles import Border, Side, Alignment
 import re
 import time
+import uuid
 from venv import logger
 import spacy
 import openai
@@ -56,7 +57,8 @@ name_of_collection_milvus = MILVUS_COLLECTION
 minio_folder_docs_name = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK  # <================================= Выбери папку, в которую будет записываться инфа (Справочник)
 
 name_of_bucket_minio = MINIO_BUCKET_NAME
-path_of_doc_for_convert = r"C:\Project1\GITProjects\myproject2\add_docs_to_milvus\spravochnik_mini.docx"  # <============== Путь к файлу для добавления его в БД
+name_of_origin_doc = "spravochnik.docx"  # <====================================================================== Название файла для добавления его в БД
+path_of_doc_for_convert = rf"C:\Project1\GITProjects\myproject2\add_docs_to_milvus\{name_of_origin_doc}"  # <============== Путь к файлу для добавления его в БД
 description_milvus_collection = (
     "Справочник СИР"  # <============== Описание коллекции milvus
 )
@@ -101,6 +103,7 @@ if not utility.has_collection(collection_name):
         FieldSchema(name="reference", dtype=DataType.VARCHAR, max_length=65535),
         FieldSchema(name="figure_id", dtype=DataType.VARCHAR, max_length=100),
         FieldSchema(name="related_table", dtype=DataType.VARCHAR, max_length=65535),
+        FieldSchema(name="origin_name_docs", dtype=DataType.VARCHAR, max_length=65535),
     ]
     schema = CollectionSchema(fields, description=description_milvus_collection)
     collection = Collection(name=collection_name, schema=schema)
@@ -320,15 +323,17 @@ def extract_content_from_word(word_path, bucket_name):
     table_counter, image_counter = 1, 1
     last_was_table = False
     saved_images = set()  # Набор для отслеживания сохраненных изображений
-
+    num_table_ff = ""
     # Обработка текста и таблиц
     for idx, block in enumerate(doc.element.body):
+
         if block.tag.endswith("p"):  # Обработка параграфов
             paragraph = block.text.strip()
             if paragraph:
                 if last_was_table and current_table_data:
                     # Сохраняем текущую собранную таблицу в MinIO как одну таблицу
-                    table_name = f"table_{table_counter}"
+                    num_table_ff = uuid.uuid4().hex[:20]
+                    table_name = f"table_{num_table_ff}"
                     table_name_xlsx = f"{table_name}.xlsx"
                     save_table_to_minio(bucket_name, table_name, current_table_data)
                     # Сохраняем описание таблицы
@@ -342,6 +347,7 @@ def extract_content_from_word(word_path, bucket_name):
                             "reference": table_name_xlsx,
                             "figure_id": table_id,
                             "related_table": "",
+                            "origin_name_docs": name_of_origin_doc,
                         }
                     )
                     # Обрабатываем текст из таблицы и сохраняем в Milvus
@@ -353,6 +359,7 @@ def extract_content_from_word(word_path, bucket_name):
                                 "reference": "",
                                 "figure_id": "",
                                 "related_table": table_name_xlsx,
+                                "origin_name_docs": name_of_origin_doc,
                             }
                         )
                     current_table_data = []  # Сброс текущих данных таблицы
@@ -373,6 +380,7 @@ def extract_content_from_word(word_path, bucket_name):
                 current_table_data = table_data
 
             # Обработка изображений внутри таблиц
+
             for row in table.rows:
                 for cell in row.cells:
                     for paragraph_index, paragraph in enumerate(cell.paragraphs):
@@ -388,9 +396,9 @@ def extract_content_from_word(word_path, bucket_name):
                                 if image_part in saved_images:
                                     continue
                                 saved_images.add(image_part)
-
+                                random_suffix_image = uuid.uuid4().hex[:20]
                                 image_data = Image.open(BytesIO(image_part.blob))
-                                image_name = f"image_{image_counter}.jpeg"
+                                image_name = f"image_{random_suffix_image}.jpeg"
                                 save_image_to_minio(bucket_name, image_name, image_data)
 
                                 # Получаем следующий параграф для описания, если он существует
@@ -410,7 +418,8 @@ def extract_content_from_word(word_path, bucket_name):
                                         "text": text_after_image,
                                         "reference": image_name,
                                         "figure_id": figure_id,
-                                        "related_table": f"table_{table_counter}.xlsx",  # Смещение на 1 для таблицы
+                                        "related_table": f"table_{num_table_ff}.xlsx",  # Смещение на 1 для таблицы
+                                        "origin_name_docs": name_of_origin_doc,
                                     }
                                 )
                                 print(
@@ -437,7 +446,8 @@ def extract_content_from_word(word_path, bucket_name):
                 saved_images.add(image_part)
 
                 image_data = Image.open(BytesIO(image_part.blob))
-                image_name = f"image_{image_counter}.jpeg"
+                random_suffix_image = uuid.uuid4().hex[:20]
+                image_name = f"image_{random_suffix_image}.jpeg"
                 save_image_to_minio(bucket_name, image_name, image_data)
 
                 # Ищем текст непосредственно после изображения
@@ -460,6 +470,7 @@ def extract_content_from_word(word_path, bucket_name):
                         "reference": image_name,
                         "figure_id": figure_id,
                         "related_table": "",  # Поле остаётся пустым
+                        "origin_name_docs": name_of_origin_doc,
                     }
                 )
                 print(
@@ -483,7 +494,7 @@ def process_content_from_word(word_path, bucket_name):
             if embedding is None:
                 continue
             embedding_np = np.array(embedding, dtype=np.float32).tolist()
-            data = [[embedding_np], [block], [""], [""], [""]]
+            data = [[embedding_np], [block], [""], [""], [""], [name_of_origin_doc]]
             collection.insert(data)
             successful_embeddings_count += 1
             print(
@@ -497,12 +508,20 @@ def process_content_from_word(word_path, bucket_name):
         reference = ref_info["reference"]
         figure_id = ref_info["figure_id"]
         related_table = ref_info["related_table"]
+        origin_name_docs = ref_info["origin_name_docs"]
         if text and text.strip():  # Проверка, чтобы текст описания не был пустым
             embedding = create_embeddings(text)
             if embedding is None:
                 continue
             embedding_np = np.array(embedding, dtype=np.float32).tolist()
-            data = [[embedding_np], [text], [reference], [figure_id], [related_table]]
+            data = [
+                [embedding_np],
+                [text],
+                [reference],
+                [figure_id],
+                [related_table],
+                [origin_name_docs],
+            ]
             collection.insert(data)
             successful_embeddings_count += 1
             print(
