@@ -5,6 +5,7 @@ import re
 import time
 import uuid
 from venv import logger
+import requests
 import spacy
 import openai
 import os
@@ -25,6 +26,8 @@ from PIL import Image
 import tiktoken
 from openpyxl import Workbook
 from openpyxl.styles import Font
+from requests.adapters import HTTPAdapter
+
 
 # Загрузка переменных среды
 load_dotenv("all_tockens.env")
@@ -57,7 +60,7 @@ name_of_collection_milvus = MILVUS_COLLECTION
 minio_folder_docs_name = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK  # <================================= Выбери папку, в которую будет записываться инфа (Справочник)
 
 name_of_bucket_minio = MINIO_BUCKET_NAME
-name_of_origin_doc = "test_docs.docx"  # <====================================================================== Название файла для добавления его в БД
+name_of_origin_doc = "spravochnik.docx"  # <====================================================================== Название файла для добавления его в БД
 path_of_doc_for_convert = rf"C:\Project1\GITProjects\myproject2\add_docs_to_milvus\{name_of_origin_doc}"  # <============== Путь к файлу для добавления его в БД
 description_milvus_collection = (
     "Справочник СИР"  # <============== Описание коллекции milvus
@@ -120,29 +123,49 @@ count_embedding_save = 1
 
 # Функция создает эмбеддинги ко всему тексту (описание рисунков, текста таблиц, любого текста)
 def create_embeddings(text, pause_duration=2):
-    """Создаёт эмбеддинг текста с помощью OpenAI, повторяя запрос до успешного ответа."""
+    """Создаёт эмбеддинг текста, каждый раз пересекаясь заново через VPN."""
     if not text.strip():
         return None
 
+    session = None
+
     while True:
-        count_try = 1
+        # 1) Закрываем предыдущую сессию (если была)
+        if session is not None:
+            try:
+                session.close()
+            except:
+                pass
+
+        # 2) Создаём новую сессию без keep-alive
+        session = requests.Session()
+        # принудительно закрывать соединение после каждого запроса
+        session.headers.update({"Connection": "close"})
+        # можно отключить пуллинг:
+        session.mount("https://", HTTPAdapter(pool_connections=0, pool_maxsize=0))
+        session.mount("http://", HTTPAdapter(pool_connections=0, pool_maxsize=0))
+
+        # 3) Привязываем её к OpenAI‑клиенту
+        openai.requestssession = session
+
         try:
             num_tokens = count_tokens(text)
-            print(f"Количество токенов в тексте: {num_tokens}")
-            response = openai.embeddings.create(
+            print(f"Токенов: {num_tokens} — запрашиваем embedding…")
+
+            resp = openai.embeddings.create(
                 input=[text], model="text-embedding-ada-002"
             )
-            time.sleep(pause_duration)  # пауза между запросами
-            return response.data[0].embedding
+            # пауза после успеха
+            return resp.data[0].embedding
 
         except Exception as e:
-            # Логируем ошибку и повторяем запрос
             print(
-                f"❗ Ошибка при создании эмбеддинга: {e}. ({count_try})Повторная попытка через {pause_duration} сек..."
+                f"❗ Ошибка при создании эмбеддинга: {e!r}\n"
+                f"  — закроем сессию и спим {pause_duration}s перед повтором…"
             )
+            # даём VPN время восстановиться
             time.sleep(pause_duration)
-            count_try += 1
-            # и цикл продолжится, пока не вернётся embedding
+            # цикл пойдёт заново, создаст новую сессию и сделает новый запрос
 
 
 # Подсчет токенов какого-то отрывка текста
@@ -517,7 +540,7 @@ def process_content_from_word(word_path, bucket_name):
             successful_embeddings_count += 1
             global count_embedding_save
             print(
-                f"Эмбеддинг и текст успешно ({count_embedding_save})добавлены для блока {successful_embeddings_count}."
+                f"Эмбеддинг и текст успешно ({count_embedding_save}) добавлены для блока {successful_embeddings_count}."
             )
             count_embedding_save += 1
         else:
@@ -545,7 +568,7 @@ def process_content_from_word(word_path, bucket_name):
             collection.insert(data)
             successful_embeddings_count += 1
             print(
-                f"Эмбеддинг и пояснение успешно добавлены для объекта: Референс - '{reference}', Родительский файл - '{related_table}'"
+                f"Эмбеддинг и пояснение успешно добавлены для объекта({count_embedding_save}): Референс - '{reference}', Родительский файл - '{related_table}'"
             )
             count_embedding_save += 1
         else:
