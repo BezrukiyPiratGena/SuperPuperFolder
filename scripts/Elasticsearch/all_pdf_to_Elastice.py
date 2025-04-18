@@ -20,7 +20,7 @@ pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
 pdf_folder = r"C:\Project1\GITProjects\elastic_docker\Доки"
 ready_folder = os.path.join(pdf_folder, "ready")
 elastic_url = (
-    "https://kibana.vnigma.ru:30006/pdf_docs_new_v5/_doc?pipeline=pdf_pipeline"
+    "https://kibana.vnigma.ru:30006/pdf_docs_new_v3/_doc?pipeline=pdf_pipeline"
 )
 
 # 🔐 Данные для авторизации
@@ -47,19 +47,10 @@ def extract_text_from_pdf(pdf_path):
     """Извлекает текст из PDF. Если PDF - скан, использует OCR."""
     text = ""
 
-    # 1️⃣ Пробуем извлечь текст обычным способом
-    with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
-
-    # 2️⃣ Если текста нет, используем OCR
-    if not text.strip():
-        print(f"🔍 PDF '{os.path.basename(pdf_path)}' - скан, запускаем OCR...")
-        images = convert_from_path(pdf_path, dpi=100)
-        for img in images:
-            text += pytesseract.image_to_string(img, lang="rus+eng")
+    print(f"🔍 PDF '{os.path.basename(pdf_path)}' - скан, запускаем OCR...")
+    images = convert_from_path(pdf_path, dpi=100)
+    for img in images:
+        text += pytesseract.image_to_string(img, lang="rus+eng")
 
     return text.strip()
 

@@ -57,7 +57,7 @@ name_of_collection_milvus = MILVUS_COLLECTION
 minio_folder_docs_name = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK  # <================================= Выбери папку, в которую будет записываться инфа (Справочник)
 
 name_of_bucket_minio = MINIO_BUCKET_NAME
-name_of_origin_doc = "spravochnik.docx"  # <====================================================================== Название файла для добавления его в БД
+name_of_origin_doc = "test_docs.docx"  # <====================================================================== Название файла для добавления его в БД
 path_of_doc_for_convert = rf"C:\Project1\GITProjects\myproject2\add_docs_to_milvus\{name_of_origin_doc}"  # <============== Путь к файлу для добавления его в БД
 description_milvus_collection = (
     "Справочник СИР"  # <============== Описание коллекции milvus
@@ -113,23 +113,36 @@ else:
 # Загрузка модели spaCy
 nlp = spacy.load("ru_core_news_lg")
 
+count_image_to_save = 1
+count_table_to_save = 1
+count_embedding_save = 1
+
 
 # Функция создает эмбеддинги ко всему тексту (описание рисунков, текста таблиц, любого текста)
-def create_embeddings(text, pause_duration=0.5):
-    """Создает эмбеддинг текста с помощью OpenAI."""
+def create_embeddings(text, pause_duration=2):
+    """Создаёт эмбеддинг текста с помощью OpenAI, повторяя запрос до успешного ответа."""
     if not text.strip():
         return None
-    try:
-        num_tokens = count_tokens(text)
-        print(f"Количество токенов в тексте: {num_tokens}")
-        response = openai.embeddings.create(
-            input=[text], model="text-embedding-ada-002"
-        )
-        time.sleep(pause_duration)
-        return response.data[0].embedding
-    except Exception as e:
-        print(f"Ошибка при создании эмбеддинга: {e}")
-        return None
+
+    while True:
+        count_try = 1
+        try:
+            num_tokens = count_tokens(text)
+            print(f"Количество токенов в тексте: {num_tokens}")
+            response = openai.embeddings.create(
+                input=[text], model="text-embedding-ada-002"
+            )
+            time.sleep(pause_duration)  # пауза между запросами
+            return response.data[0].embedding
+
+        except Exception as e:
+            # Логируем ошибку и повторяем запрос
+            print(
+                f"❗ Ошибка при создании эмбеддинга: {e}. ({count_try})Повторная попытка через {pause_duration} сек..."
+            )
+            time.sleep(pause_duration)
+            count_try += 1
+            # и цикл продолжится, пока не вернётся embedding
 
 
 # Подсчет токенов какого-то отрывка текста
@@ -273,7 +286,10 @@ def save_table_to_minio(bucket_name, table_name, table_data):
         ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         ContentDisposition="inline",  # Указывает браузеру открывать файл, а не скачивать
     )
-    print(f"Таблица сохранена в MinIO как {table_name}.xlsx")
+    global count_table_to_save
+    print(f"Таблица сохранена ({count_table_to_save}) в MinIO как {table_name}.xlsx")
+
+    count_table_to_save += 1
 
 
 # Функция сохраняет все рисунки из документа как JPEG
@@ -291,7 +307,9 @@ def save_image_to_minio(bucket_name, image_name, image_data):
         ContentType="image/jpeg",  # MIME-тип изображения
         ContentDisposition="inline",  # Указывает браузеру открывать файл, а не скачивать
     )
-    print(f"Изображение загружено в MinIO как {image_name}")
+    global count_image_to_save
+    print(f"Изображение загружено ({count_image_to_save}) в MinIO как {image_name}")
+    count_image_to_save += 1
     return image_name  # Возвращаем имя файла вместо ссылки
 
 
@@ -497,9 +515,11 @@ def process_content_from_word(word_path, bucket_name):
             data = [[embedding_np], [block], [""], [""], [""], [name_of_origin_doc]]
             collection.insert(data)
             successful_embeddings_count += 1
+            global count_embedding_save
             print(
-                f"Эмбеддинг и текст успешно добавлены для блока {successful_embeddings_count}."
+                f"Эмбеддинг и текст успешно ({count_embedding_save})добавлены для блока {successful_embeddings_count}."
             )
+            count_embedding_save += 1
         else:
             print("Пустой текст, пропуск эмбеддинга")
 
@@ -527,6 +547,7 @@ def process_content_from_word(word_path, bucket_name):
             print(
                 f"Эмбеддинг и пояснение успешно добавлены для объекта: Референс - '{reference}', Родительский файл - '{related_table}'"
             )
+            count_embedding_save += 1
         else:
             print("Пустое описание, пропуск эмбеддинга для объекта:", reference)
 
