@@ -8,19 +8,23 @@ import logging
 import warnings
 import pdfplumber
 import pytesseract
+import cv2
 from pdf2image import convert_from_path
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import easyocr
+import numpy as np
 
 warnings.simplefilter("ignore")
 
 # === Настройки ===
-TESSERACT_PATH = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
+reader = easyocr.Reader(["ru", "en"], gpu=True)
+POPPLER_PATH = r"C:\Project1\Poppler\poppler-24.08.0\Library\bin"
+
 
 pdf_folder = r"C:\Project1\GITProjects\elastic_docker\Доки"
 ready_folder = os.path.join(pdf_folder, "ready")
 elastic_url = (
-    "https://kibana.vnigma.ru:30006/pdf_docs_new_v3/_doc?pipeline=pdf_pipeline"
+    "https://kibana.vnigma.ru:30006/pdf_docs_new_v4/_doc?pipeline=pdf_pipeline"
 )
 
 # 🔐 Данные для авторизации
@@ -45,14 +49,25 @@ if not os.path.exists(ready_folder):
 
 def extract_text_from_pdf(pdf_path):
     """Извлекает текст из PDF. Если PDF - скан, использует OCR."""
-    text = ""
+    text = []
 
     print(f"🔍 PDF '{os.path.basename(pdf_path)}' - скан, запускаем OCR...")
-    images = convert_from_path(pdf_path, dpi=100)
-    for img in images:
-        text += pytesseract.image_to_string(img, lang="rus+eng")
+    pages = convert_from_path(pdf_path, dpi=200, poppler_path=POPPLER_PATH)
 
-    return text.strip()
+    for img in pages:
+        img_np = preprocess_image(np.array(img))
+
+        lines = reader.readtext(img_np, detail=0, paragraph=True)
+        lines = [line for line in lines if len(line.strip()) > 2]
+
+        text.append("\n".join(lines))
+    return "\n\n".join(text)
+
+
+def preprocess_image(img_np):
+    gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+    _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
+    return cv2.cvtColor(thresh, cv2.COLOR_GRAY2RGB)
 
 
 def pdf_to_base64(pdf_path):

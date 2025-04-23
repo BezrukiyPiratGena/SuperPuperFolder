@@ -1,0 +1,195 @@
+2025-04-18 16:11:03,976 - INFO - Начата обработка файла: Important information related to upgrade of VDR software from v2.x to v3.x.pdf
+2025-04-18 16:11:03,976 - INFO - Начата обработка файла: Installation details forn Kit VDR tipo E.pdf
+2025-04-18 16:11:03,977 - INFO - Начата обработка файла: INSTRUCTION MANUAL (4).pdf
+2025-04-18 16:11:03,977 - INFO - Начата обработка файла: Intellian i3, Quick Installation Guide.pdf
+2025-04-18 16:11:13,174 - INFO - Часть 1 файла Intellian i3, Quick Installation Guide.pdf успешно загружена.
+2025-04-18 16:11:13,177 - INFO - Файл Intellian i3, Quick Installation Guide.pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-18 16:11:13,180 - INFO - Начата обработка файла: Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf
+2025-04-18 16:11:13,917 - INFO - Часть 1 файла Installation details forn Kit VDR tipo E.pdf успешно загружена.
+2025-04-18 16:11:13,920 - INFO - Файл Installation details forn Kit VDR tipo E.pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-18 16:11:13,923 - INFO - Начата обработка файла: INTERNAL_WIRING(TD-201&202)(37230115-04-01).pdf
+2025-04-18 16:11:13,955 - INFO - Часть 1 файла Important information related to upgrade of VDR software from v2.x to v3.x.pdf успешно загружена.
+2025-04-18 16:11:13,957 - INFO - Файл Important information related to upgrade of VDR software from v2.x to v3.x.pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-18 16:11:13,959 - INFO - Начата обработка файла: Introduction.pdf
+2025-04-18 16:11:19,237 - INFO - Часть 1 файла INTERNAL_WIRING(TD-201&202)(37230115-04-01).pdf успешно загружена.
+2025-04-18 16:11:19,240 - INFO - Файл INTERNAL_WIRING(TD-201&202)(37230115-04-01).pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-18 16:12:23,397 - INFO - Часть 1 файла Introduction.pdf успешно загружена.
+2025-04-18 16:12:23,407 - INFO - Файл Introduction.pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-18 16:14:51,327 - INFO - Часть 1 файла INSTRUCTION MANUAL (4).pdf успешно загружена.
+2025-04-18 16:14:51,975 - INFO - Часть 2 файла INSTRUCTION MANUAL (4).pdf успешно загружена.
+2025-04-18 16:14:52,670 - INFO - Часть 3 файла INSTRUCTION MANUAL (4).pdf успешно загружена.
+2025-04-18 16:14:53,319 - INFO - Часть 4 файла INSTRUCTION MANUAL (4).pdf успешно загружена.
+2025-04-18 16:14:53,321 - INFO - Файл INSTRUCTION MANUAL (4).pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-18 16:15:02,758 - INFO - Часть 1 файла Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf успешно загружена.
+2025-04-18 16:15:05,551 - INFO - Часть 2 файла Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf успешно загружена.
+2025-04-18 16:15:08,845 - INFO - Часть 3 файла Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf успешно загружена.
+2025-04-18 16:15:11,471 - INFO - Часть 4 файла Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf успешно загружена.
+2025-04-18 16:15:14,291 - INFO - Часть 5 файла Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf успешно загружена.
+2025-04-18 16:15:14,293 - INFO - Файл Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-21 10:23:30,713 - INFO - Начата обработка файла: Important information related to upgrade of VDR software from v2.x to v3.x.pdf
+2025-04-21 10:23:30,713 - INFO - Начата обработка файла: Installation details forn Kit VDR tipo E.pdf
+2025-04-21 10:23:30,715 - INFO - Начата обработка файла: INSTRUCTION MANUAL (4).pdf
+2025-04-21 10:23:30,716 - INFO - Начата обработка файла: Intellian i3, Quick Installation Guide.pdf
+2025-04-21 10:23:32,243 - ERROR - Неизвестная ошибка при обработке Important information related to upgrade of VDR software from v2.x to v3.x.pdf: Invalid input type. Supporting format = string(file path or url), bytes, numpy array
+Traceback (most recent call last):
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 103, in process_pdf
+    pdf_text = extract_text_from_pdf(file_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 56, in extract_text_from_pdf
+    lines = reader.readtext(img, detail=0, paragraph=True)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python312\Lib\site-packages\easyocr\easyocr.py", line 454, in readtext
+    img, img_cv_grey = reformat_input(image)
+                       ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python312\Lib\site-packages\easyocr\utils.py", line 767, in reformat_input
+    raise ValueError('Invalid input type. Supporting format = string(file path or url), bytes, numpy array')
+ValueError: Invalid input type. Supporting format = string(file path or url), bytes, numpy array
+2025-04-21 10:23:32,244 - ERROR - Неизвестная ошибка при обработке Installation details forn Kit VDR tipo E.pdf: Invalid input type. Supporting format = string(file path or url), bytes, numpy array
+Traceback (most recent call last):
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 103, in process_pdf
+    pdf_text = extract_text_from_pdf(file_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 56, in extract_text_from_pdf
+    lines = reader.readtext(img, detail=0, paragraph=True)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python312\Lib\site-packages\easyocr\easyocr.py", line 454, in readtext
+    img, img_cv_grey = reformat_input(image)
+                       ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python312\Lib\site-packages\easyocr\utils.py", line 767, in reformat_input
+    raise ValueError('Invalid input type. Supporting format = string(file path or url), bytes, numpy array')
+ValueError: Invalid input type. Supporting format = string(file path or url), bytes, numpy array
+2025-04-21 10:23:32,252 - INFO - Начата обработка файла: Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf
+2025-04-21 10:23:32,257 - INFO - Начата обработка файла: INTERNAL_WIRING(TD-201&202)(37230115-04-01).pdf
+2025-04-21 10:23:32,280 - ERROR - Неизвестная ошибка при обработке Intellian i3, Quick Installation Guide.pdf: Invalid input type. Supporting format = string(file path or url), bytes, numpy array
+Traceback (most recent call last):
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 103, in process_pdf
+    pdf_text = extract_text_from_pdf(file_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 56, in extract_text_from_pdf
+    lines = reader.readtext(img, detail=0, paragraph=True)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python312\Lib\site-packages\easyocr\easyocr.py", line 454, in readtext
+    img, img_cv_grey = reformat_input(image)
+                       ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python312\Lib\site-packages\easyocr\utils.py", line 767, in reformat_input
+    raise ValueError('Invalid input type. Supporting format = string(file path or url), bytes, numpy array')
+ValueError: Invalid input type. Supporting format = string(file path or url), bytes, numpy array
+2025-04-21 10:23:33,244 - ERROR - Неизвестная ошибка при обработке INTERNAL_WIRING(TD-201&202)(37230115-04-01).pdf: Invalid input type. Supporting format = string(file path or url), bytes, numpy array
+Traceback (most recent call last):
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 103, in process_pdf
+    pdf_text = extract_text_from_pdf(file_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 56, in extract_text_from_pdf
+    lines = reader.readtext(img, detail=0, paragraph=True)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python312\Lib\site-packages\easyocr\easyocr.py", line 454, in readtext
+    img, img_cv_grey = reformat_input(image)
+                       ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python312\Lib\site-packages\easyocr\utils.py", line 767, in reformat_input
+    raise ValueError('Invalid input type. Supporting format = string(file path or url), bytes, numpy array')
+ValueError: Invalid input type. Supporting format = string(file path or url), bytes, numpy array
+2025-04-21 10:23:44,701 - ERROR - Неизвестная ошибка при обработке INSTRUCTION MANUAL (4).pdf: Invalid input type. Supporting format = string(file path or url), bytes, numpy array
+Traceback (most recent call last):
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 103, in process_pdf
+    pdf_text = extract_text_from_pdf(file_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 56, in extract_text_from_pdf
+    lines = reader.readtext(img, detail=0, paragraph=True)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python312\Lib\site-packages\easyocr\easyocr.py", line 454, in readtext
+    img, img_cv_grey = reformat_input(image)
+                       ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python312\Lib\site-packages\easyocr\utils.py", line 767, in reformat_input
+    raise ValueError('Invalid input type. Supporting format = string(file path or url), bytes, numpy array')
+ValueError: Invalid input type. Supporting format = string(file path or url), bytes, numpy array
+2025-04-21 10:23:48,465 - ERROR - Неизвестная ошибка при обработке Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf: Invalid input type. Supporting format = string(file path or url), bytes, numpy array
+Traceback (most recent call last):
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 103, in process_pdf
+    pdf_text = extract_text_from_pdf(file_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 56, in extract_text_from_pdf
+    lines = reader.readtext(img, detail=0, paragraph=True)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python312\Lib\site-packages\easyocr\easyocr.py", line 454, in readtext
+    img, img_cv_grey = reformat_input(image)
+                       ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python312\Lib\site-packages\easyocr\utils.py", line 767, in reformat_input
+    raise ValueError('Invalid input type. Supporting format = string(file path or url), bytes, numpy array')
+ValueError: Invalid input type. Supporting format = string(file path or url), bytes, numpy array
+2025-04-21 10:25:37,734 - INFO - Начата обработка файла: Important information related to upgrade of VDR software from v2.x to v3.x.pdf
+2025-04-21 10:25:37,734 - INFO - Начата обработка файла: Installation details forn Kit VDR tipo E.pdf
+2025-04-21 10:25:37,736 - INFO - Начата обработка файла: INSTRUCTION MANUAL (4).pdf
+2025-04-21 10:25:37,737 - INFO - Начата обработка файла: Intellian i3, Quick Installation Guide.pdf
+2025-04-21 10:26:29,481 - ERROR - Неизвестная ошибка при обработке INSTRUCTION MANUAL (4).pdf: 'str' object has no attribute 'append'
+Traceback (most recent call last):
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 106, in process_pdf
+    pdf_text = extract_text_from_pdf(file_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 60, in extract_text_from_pdf
+    text.append("\n".join(lines))
+    ^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'append'
+2025-04-21 10:26:29,617 - INFO - Начата обработка файла: Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf
+2025-04-21 10:26:35,738 - ERROR - Неизвестная ошибка при обработке Installation details forn Kit VDR tipo E.pdf: 'str' object has no attribute 'append'
+Traceback (most recent call last):
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 106, in process_pdf
+    pdf_text = extract_text_from_pdf(file_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 60, in extract_text_from_pdf
+    text.append("\n".join(lines))
+    ^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'append'
+2025-04-21 10:26:35,745 - INFO - Начата обработка файла: INTERNAL_WIRING(TD-201&202)(37230115-04-01).pdf
+2025-04-21 10:27:02,222 - ERROR - Неизвестная ошибка при обработке INTERNAL_WIRING(TD-201&202)(37230115-04-01).pdf: 'str' object has no attribute 'append'
+Traceback (most recent call last):
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 106, in process_pdf
+    pdf_text = extract_text_from_pdf(file_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 60, in extract_text_from_pdf
+    text.append("\n".join(lines))
+    ^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'append'
+2025-04-21 10:27:07,243 - ERROR - Неизвестная ошибка при обработке Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf: 'str' object has no attribute 'append'
+Traceback (most recent call last):
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 106, in process_pdf
+    pdf_text = extract_text_from_pdf(file_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 60, in extract_text_from_pdf
+    text.append("\n".join(lines))
+    ^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'append'
+2025-04-21 10:27:08,211 - ERROR - Неизвестная ошибка при обработке Important information related to upgrade of VDR software from v2.x to v3.x.pdf: 'str' object has no attribute 'append'
+Traceback (most recent call last):
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 106, in process_pdf
+    pdf_text = extract_text_from_pdf(file_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 60, in extract_text_from_pdf
+    text.append("\n".join(lines))
+    ^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'append'
+2025-04-21 10:27:14,679 - ERROR - Неизвестная ошибка при обработке Intellian i3, Quick Installation Guide.pdf: 'str' object has no attribute 'append'
+Traceback (most recent call last):
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 106, in process_pdf
+    pdf_text = extract_text_from_pdf(file_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Project1\GITProjects\myproject2\scripts\Elasticsearch\all_pdf_to_Elastice.py", line 60, in extract_text_from_pdf
+    text.append("\n".join(lines))
+    ^^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'append'
+2025-04-21 10:28:13,095 - INFO - Начата обработка файла: Important information related to upgrade of VDR software from v2.x to v3.x.pdf
+2025-04-21 10:28:13,095 - INFO - Начата обработка файла: Installation details forn Kit VDR tipo E.pdf
+2025-04-21 10:28:13,109 - INFO - Начата обработка файла: INSTRUCTION MANUAL (4).pdf
+2025-04-21 10:28:13,122 - INFO - Начата обработка файла: Intellian i3, Quick Installation Guide.pdf
+2025-04-21 10:30:14,379 - INFO - Часть 1 файла Installation details forn Kit VDR tipo E.pdf успешно загружена.
+2025-04-21 10:30:14,385 - INFO - Файл Installation details forn Kit VDR tipo E.pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-21 10:30:14,387 - INFO - Начата обработка файла: Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf
+2025-04-21 10:30:30,083 - INFO - Часть 1 файла Important information related to upgrade of VDR software from v2.x to v3.x.pdf успешно загружена.
+2025-04-21 10:30:30,085 - INFO - Файл Important information related to upgrade of VDR software from v2.x to v3.x.pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-21 10:30:30,088 - INFO - Начата обработка файла: INTERNAL_WIRING(TD-201&202)(37230115-04-01).pdf
+2025-04-21 10:30:31,485 - INFO - Часть 1 файла Intellian i3, Quick Installation Guide.pdf успешно загружена.
+2025-04-21 10:30:31,502 - INFO - Файл Intellian i3, Quick Installation Guide.pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-21 10:31:02,482 - INFO - Часть 1 файла INTERNAL_WIRING(TD-201&202)(37230115-04-01).pdf успешно загружена.
+2025-04-21 10:31:02,487 - INFO - Файл INTERNAL_WIRING(TD-201&202)(37230115-04-01).pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-21 10:43:22,335 - INFO - Начата обработка файла: INSTRUCTION MANUAL (4).pdf
+2025-04-21 10:43:22,336 - INFO - Начата обработка файла: Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf
+2025-04-21 10:43:22,337 - INFO - Начата обработка файла: MR-1000 OME (6).pdf
