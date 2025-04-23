@@ -193,3 +193,197 @@ AttributeError: 'str' object has no attribute 'append'
 2025-04-21 10:43:22,335 - INFO - Начата обработка файла: INSTRUCTION MANUAL (4).pdf
 2025-04-21 10:43:22,336 - INFO - Начата обработка файла: Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf
 2025-04-21 10:43:22,337 - INFO - Начата обработка файла: MR-1000 OME (6).pdf
+2025-04-23 13:38:54,291 - INFO - Начата обработка файла: INSTRUCTION MANUAL (4).pdf
+2025-04-23 13:38:54,293 - INFO - Начата обработка файла: Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf
+2025-04-23 13:38:54,295 - INFO - Начата обработка файла: MR-1000 OME (6).pdf
+2025-04-23 13:39:27,378 - INFO - Часть 1 файла MR-1000 OME (6).pdf успешно загружена.
+2025-04-23 13:39:28,110 - INFO - Часть 2 файла MR-1000 OME (6).pdf успешно загружена.
+2025-04-23 13:39:28,910 - INFO - Часть 3 файла MR-1000 OME (6).pdf успешно загружена.
+2025-04-23 13:39:28,974 - INFO - Файл MR-1000 OME (6).pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-23 13:39:37,902 - INFO - Часть 1 файла Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf успешно загружена.
+2025-04-23 13:39:42,292 - INFO - Часть 2 файла Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf успешно загружена.
+2025-04-23 13:39:45,962 - INFO - Часть 3 файла Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf успешно загружена.
+2025-04-23 13:39:50,900 - INFO - Часть 4 файла Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf успешно загружена.
+2025-04-23 13:39:53,559 - INFO - Часть 5 файла Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf успешно загружена.
+2025-04-23 13:39:53,567 - INFO - Файл Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-23 13:44:23,553 - INFO - Начата обработка файла: INSTRUCTION MANUAL (4).pdf
+2025-04-23 13:49:27,860 - INFO - Начата обработка файла: Important information related to upgrade of VDR software from v2.x to v3.x.pdf
+2025-04-23 13:49:27,861 - INFO - Начата обработка файла: Installation details forn Kit VDR tipo E.pdf
+2025-04-23 13:49:27,862 - INFO - Начата обработка файла: INSTRUCTION MANUAL (4).pdf
+2025-04-23 13:49:27,866 - INFO - Начата обработка файла: Intellian i3, Quick Installation Guide.pdf
+2025-04-23 13:49:28,011 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:29,346 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:29,372 - INFO - Часть 1 файла Important information related to upgrade of VDR software from v2.x to v3.x.pdf успешно загружена.
+2025-04-23 13:49:29,455 - INFO - Файл Important information related to upgrade of VDR software from v2.x to v3.x.pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-23 13:49:29,466 - INFO - Начата обработка файла: Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf
+2025-04-23 13:49:29,749 - INFO - Часть 1 файла Intellian i3, Quick Installation Guide.pdf успешно загружена.
+2025-04-23 13:49:29,791 - INFO - Файл Intellian i3, Quick Installation Guide.pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-23 13:49:29,795 - INFO - Начата обработка файла: INTERNAL_WIRING(TD-201&202)(37230115-04-01).pdf
+2025-04-23 13:49:29,999 - INFO - Часть 1 файла Installation details forn Kit VDR tipo E.pdf успешно загружена.
+2025-04-23 13:49:30,058 - INFO - Файл Installation details forn Kit VDR tipo E.pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-23 13:49:30,077 - INFO - Начата обработка файла: Introduction.pdf
+2025-04-23 13:49:30,206 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,207 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,208 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,209 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,231 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,246 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,274 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,310 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,326 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,349 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,389 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,425 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,430 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,469 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,517 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,551 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,556 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,558 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,559 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,561 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,562 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,563 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,564 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,566 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,567 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,569 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,570 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,572 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,573 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,575 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,576 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,578 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,579 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,581 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,584 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:49:30,584 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,001 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,017 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,017 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,018 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,046 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,046 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,047 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,047 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,078 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,093 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,108 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,108 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,139 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,139 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,154 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,155 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,169 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,184 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,184 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,200 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,221 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,222 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,232 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,248 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,270 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,277 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,277 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,277 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,278 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,311 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,327 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,342 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,345 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,346 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,347 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:05,347 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 13:50:13,917 - INFO - Часть 1 файла Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf успешно загружена.
+2025-04-23 13:50:17,652 - INFO - Часть 2 файла Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf успешно загружена.
+2025-04-23 13:50:20,581 - INFO - Часть 3 файла Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf успешно загружена.
+2025-04-23 13:50:24,158 - INFO - Часть 4 файла Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf успешно загружена.
+2025-04-23 13:50:27,032 - INFO - Часть 5 файла Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf успешно загружена.
+2025-04-23 13:50:27,150 - INFO - Файл Intellian t110W-t130W-t110Q-t130Q Installation and Operation Manual.pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-23 13:50:27,190 - INFO - Начата обработка файла: MR-1000 OME (6).pdf
+2025-04-23 13:50:56,073 - INFO - Часть 1 файла MR-1000 OME (6).pdf успешно загружена.
+2025-04-23 13:50:57,273 - INFO - Часть 2 файла MR-1000 OME (6).pdf успешно загружена.
+2025-04-23 13:50:58,002 - INFO - Часть 3 файла MR-1000 OME (6).pdf успешно загружена.
+2025-04-23 13:50:58,005 - INFO - Файл MR-1000 OME (6).pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-23 13:50:58,008 - INFO - Начата обработка файла: Эпик_ Разработка AI-бота13.pdf
+2025-04-23 13:50:58,999 - INFO - Часть 1 файла Эпик_ Разработка AI-бота13.pdf успешно загружена.
+2025-04-23 13:50:59,002 - INFO - Файл Эпик_ Разработка AI-бота13.pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-23 13:52:21,670 - INFO - Часть 1 файла INTERNAL_WIRING(TD-201&202)(37230115-04-01).pdf успешно загружена.
+2025-04-23 13:52:21,683 - INFO - Файл INTERNAL_WIRING(TD-201&202)(37230115-04-01).pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-23 14:49:22,511 - INFO - Начата обработка файла: INSTRUCTION MANUAL (4).pdf
+2025-04-23 14:49:22,512 - INFO - Начата обработка файла: Introduction.pdf
+2025-04-23 14:49:22,513 - INFO - Начата обработка файла: Эпик_ Разработка AI-бота13.pdf
+2025-04-23 14:49:22,563 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,567 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,569 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,574 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,587 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,592 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,602 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,608 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,665 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,681 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,694 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,700 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,707 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,709 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,712 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,714 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,718 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,720 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,727 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,740 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,754 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,769 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,785 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,821 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,848 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,868 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,880 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,882 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,890 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,901 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,948 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:22,995 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:23,011 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:23,014 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:23,017 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:23,018 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:23,247 - INFO - Часть 1 файла Эпик_ Разработка AI-бота13.pdf успешно загружена.
+2025-04-23 14:49:23,463 - INFO - Файл Эпик_ Разработка AI-бота13.pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\Доки\ready
+2025-04-23 14:49:33,030 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,030 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,030 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,030 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,031 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,031 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,031 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,031 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,031 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,031 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,031 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,031 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,031 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,031 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,031 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,032 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,032 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,032 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,032 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,032 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,032 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,032 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,032 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,032 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,032 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,032 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,032 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,032 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,033 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,033 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,033 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,033 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,033 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,033 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,033 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-23 14:49:33,033 - WARNING - CropBox missing from /Page, defaulting to MediaBox

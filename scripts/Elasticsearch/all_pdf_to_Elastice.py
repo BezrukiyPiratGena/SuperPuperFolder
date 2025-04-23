@@ -24,7 +24,7 @@ POPPLER_PATH = r"C:\Project1\Poppler\poppler-24.08.0\Library\bin"
 pdf_folder = r"C:\Project1\GITProjects\elastic_docker\Доки"
 ready_folder = os.path.join(pdf_folder, "ready")
 elastic_url = (
-    "https://kibana.vnigma.ru:30006/pdf_docs_new_v4/_doc?pipeline=pdf_pipeline"
+    "https://kibana.vnigma.ru:30006/pdf_docs_new_v3/_doc?pipeline=pdf_pipeline"
 )
 
 # 🔐 Данные для авторизации
@@ -48,20 +48,32 @@ if not os.path.exists(ready_folder):
 
 
 def extract_text_from_pdf(pdf_path):
-    """Извлекает текст из PDF. Если PDF - скан, использует OCR."""
-    text = []
+    """Сначала пытается извлечь текст стандартным способом, затем через OCR, если неудачно."""
+    text = ""
 
-    print(f"🔍 PDF '{os.path.basename(pdf_path)}' - скан, запускаем OCR...")
-    pages = convert_from_path(pdf_path, dpi=200, poppler_path=POPPLER_PATH)
+    # === 1. Попытка обычного извлечения текста ===
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            extracted_pages = [page.extract_text() for page in pdf.pages]
+            text = "\n\n".join(filter(None, extracted_pages)).strip()
+    except Exception as e:
+        print(
+            f"⚠ Ошибка при извлечении текста файла {os.path.basename(pdf_path)} через pdfplumber: {e}"
+        )
 
-    for img in pages:
-        img_np = preprocess_image(np.array(img))
+    # === 2. Если текст не найден — запускаем OCR ===
+    if not text or len(text) < 50:  # Можно регулировать порог, напр. < 50 символов
+        print(f"🔍 PDF '{os.path.basename(pdf_path)}' - текста нет, запускаем OCR...")
+        text_blocks = []
+        pages = convert_from_path(pdf_path, dpi=200, poppler_path=POPPLER_PATH)
+        for img in pages:
+            img_np = preprocess_image(np.array(img))
+            lines = reader.readtext(img_np, detail=0, paragraph=True)
+            lines = [line for line in lines if len(line.strip()) > 2]
+            text_blocks.append("\n".join(lines))
+        text = "\n\n".join(text_blocks)
 
-        lines = reader.readtext(img_np, detail=0, paragraph=True)
-        lines = [line for line in lines if len(line.strip()) > 2]
-
-        text.append("\n".join(lines))
-    return "\n\n".join(text)
+    return text
 
 
 def preprocess_image(img_np):
