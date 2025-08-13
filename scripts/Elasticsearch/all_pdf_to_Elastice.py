@@ -21,7 +21,7 @@ reader = easyocr.Reader(["ru", "en"], gpu=True)
 POPPLER_PATH = r"C:\Project1\Poppler\poppler-24.08.0\Library\bin"
 
 
-pdf_folder = r"C:\Project1\GITProjects\elastic_docker\Доки"
+pdf_folder = r"C:\Project1\GITProjects\elastic_docker"
 ready_folder = os.path.join(pdf_folder, "ready")
 elastic_url = (
     "https://kibana.vnigma.ru:30006/pdf_docs_new_v3/_doc?pipeline=pdf_pipeline"
@@ -87,7 +87,7 @@ def pdf_to_base64(pdf_path):
         return base64.b64encode(f.read()).decode("utf-8")
 
 
-def split_text_by_sentences(text, max_length=30000):
+def split_text_by_sentences(text, max_length=10000):
     print("Запустился split_text_by_sentences")
     """
     Разбивает текст по предложениям так, чтобы каждый чанк не превышал max_length символов.
@@ -125,27 +125,17 @@ def process_pdf(filename):
 
     try:
         pdf_text = extract_text_from_pdf(file_path)
-        # Подготовим текст: добавим имя файла в начале для каждого документа
         header_text = f"{filename}\n\n"
         full_text = header_text + pdf_text
 
         print(f"Длина текста - {len(full_text)}")
-        # Если текст превышает 30000 символов, разбиваем его на части, иначе оставляем как есть.
-        if len(full_text) > 30000:
-            chunks = split_text_by_sentences(full_text, max_length=30000)
-        else:
-            chunks = [full_text]
-
+        chunks = split_text_by_sentences(full_text, max_length=10000)
         base64_data = pdf_to_base64(file_path)
 
-        # Если несколько частей, отправляем их как отдельные документы, сохраняя имя файла без изменений.
         for i, chunk in enumerate(chunks, start=1):
-            # Если текст делится на части, можно добавить указание части в начале текста.
-            if len(chunks) > 1:
-
-                text_to_send = f"{chunk}\n\n(part {i} из {len(chunks)})"
-            else:
-                text_to_send = chunk
+            text_to_send = (
+                f"{chunk}\n\n(part {i} из {len(chunks)})" if len(chunks) > 1 else chunk
+            )
             print(f"длина стака - {len(text_to_send)}")
             document = {
                 "data": base64_data,
@@ -173,7 +163,6 @@ def process_pdf(filename):
                     f"Ошибка загрузки части {i} файла {filename}: Код {response.status_code} - {response.text}"
                 )
 
-        # Если все части загружены успешно, перемещаем исходный файл в папку ready.
         shutil.move(file_path, ready_path)
         print(f"📂 Файл перемещён в {ready_folder}")
         logging.info(f"Файл {filename} успешно загружен и перемещён в {ready_folder}")

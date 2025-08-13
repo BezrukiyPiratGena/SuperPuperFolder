@@ -1,0 +1,30 @@
+2025-04-28 10:09:27,310 - INFO - Начата обработка файла: Команды(запросы) по эластике.docx
+2025-04-28 10:09:27,311 - INFO - Начата обработка файла: Ошибка этой хуеты эластики.docx
+2025-04-28 10:09:27,311 - INFO - Начата обработка файла: ТЗ миграции Эластики+Кибаны.docx
+2025-04-28 10:09:27,570 - ERROR - Ошибка загрузки части 1 файла Команды(запросы) по эластике.docx: Код 400 - {"error":{"root_cause":[{"type":"illegal_argument_exception","reason":"pipeline with id [word_pipeline] does not exist"}],"type":"illegal_argument_exception","reason":"pipeline with id [word_pipeline] does not exist"},"status":400}
+2025-04-28 10:09:27,721 - ERROR - Ошибка загрузки части 1 файла Ошибка этой хуеты эластики.docx: Код 400 - {"error":{"root_cause":[{"type":"illegal_argument_exception","reason":"pipeline with id [word_pipeline] does not exist"}],"type":"illegal_argument_exception","reason":"pipeline with id [word_pipeline] does not exist"},"status":400}
+2025-04-28 10:09:27,723 - INFO - Файл Ошибка этой хуеты эластики.docx успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\ready
+2025-04-28 10:09:27,790 - ERROR - Ошибка загрузки части 2 файла Команды(запросы) по эластике.docx: Код 400 - {"error":{"root_cause":[{"type":"illegal_argument_exception","reason":"pipeline with id [word_pipeline] does not exist"}],"type":"illegal_argument_exception","reason":"pipeline with id [word_pipeline] does not exist"},"status":400}
+2025-04-28 10:09:27,791 - INFO - Файл Команды(запросы) по эластике.docx успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\ready
+2025-04-28 10:09:27,868 - ERROR - Ошибка загрузки части 1 файла ТЗ миграции Эластики+Кибаны.docx: Код 400 - {"error":{"root_cause":[{"type":"illegal_argument_exception","reason":"pipeline with id [word_pipeline] does not exist"}],"type":"illegal_argument_exception","reason":"pipeline with id [word_pipeline] does not exist"},"status":400}
+2025-04-28 10:09:27,870 - INFO - Файл ТЗ миграции Эластики+Кибаны.docx успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\ready
+2025-04-28 10:12:02,910 - INFO - Начата обработка файла: Команды(запросы) по эластике.docx
+2025-04-28 10:12:02,911 - INFO - Начата обработка файла: Ошибка этой хуеты эластики.docx
+2025-04-28 10:12:02,911 - INFO - Начата обработка файла: ТЗ миграции Эластики+Кибаны.docx
+2025-04-28 10:12:05,907 - INFO - Часть 1 файла ТЗ миграции Эластики+Кибаны.docx успешно загружена.
+2025-04-28 10:12:05,908 - INFO - Файл ТЗ миграции Эластики+Кибаны.docx успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\ready
+2025-04-28 10:12:05,936 - INFO - Часть 1 файла Команды(запросы) по эластике.docx успешно загружена.
+2025-04-28 10:12:05,970 - INFO - Часть 1 файла Ошибка этой хуеты эластики.docx успешно загружена.
+2025-04-28 10:12:05,971 - INFO - Файл Ошибка этой хуеты эластики.docx успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\ready
+2025-04-28 10:12:06,133 - INFO - Часть 2 файла Команды(запросы) по эластике.docx успешно загружена.
+2025-04-28 10:12:06,134 - INFO - Файл Команды(запросы) по эластике.docx успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\ready
+2025-04-28 10:16:05,393 - INFO - Начата обработка файла: Команды(запросы) по эластике.docx
+2025-04-28 10:16:05,394 - INFO - Начата обработка файла: Ошибка этой хуеты эластики.docx
+2025-04-28 10:16:05,395 - INFO - Начата обработка файла: ТЗ миграции Эластики+Кибаны.docx
+2025-04-28 10:16:06,114 - INFO - Часть 1 файла Команды(запросы) по эластике.docx успешно загружена.
+2025-04-28 10:16:06,127 - INFO - Часть 1 файла Ошибка этой хуеты эластики.docx успешно загружена.
+2025-04-28 10:16:06,129 - INFO - Файл Ошибка этой хуеты эластики.docx успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\ready
+2025-04-28 10:16:06,155 - INFO - Часть 1 файла ТЗ миграции Эластики+Кибаны.docx успешно загружена.
+2025-04-28 10:16:06,157 - INFO - Файл ТЗ миграции Эластики+Кибаны.docx успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\ready
+2025-04-28 10:16:07,378 - INFO - Часть 2 файла Команды(запросы) по эластике.docx успешно загружена.
+2025-04-28 10:16:07,381 - INFO - Файл Команды(запросы) по эластике.docx успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\ready

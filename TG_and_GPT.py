@@ -38,6 +38,8 @@ from openpyxl import load_workbook  # работа с xlsx
 from io import StringIO
 from io import BytesIO
 from itertools import product
+from collections import defaultdict
+
 
 # Загрузка переменных окружения из файла .env
 load_dotenv("keys_google_sheet.env")
@@ -47,6 +49,7 @@ load_dotenv("keys_minio.env")
 load_dotenv("keys_elastic.env")
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # Токен ТГ Ботa
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # API токен OpenAI
 MODEL_GPT_INT = os.getenv("MODEL_GPT_INT")  # Модель ИИ, с которой ведется диалог
 
@@ -128,6 +131,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+logger.info(f"TELEGRAM_BOT_TOKEN - {TELEGRAM_BOT_TOKEN}")
 # Настройка Google Sheets API
 credentials = Credentials.from_service_account_info(
     google_credentials, scopes=["https://www.googleapis.com/auth/spreadsheets"]
@@ -203,6 +207,20 @@ logger.info(f"| Коллекция справочника загружена |")
 logger.info(f"-----------------------------------")
 
 
+# === Загружаем маппинг один раз при старте ===
+JSON_MAP = []
+json_path = os.path.join(os.path.dirname(__file__), "all_links.json")
+
+try:
+    if os.path.exists(json_path):
+        with open(json_path, "r", encoding="utf-8") as f:
+            JSON_MAP = json.load(f)
+    else:
+        logger.error(f"Файл маппинга не найден: {json_path}")
+except Exception as e:
+    logger.error(f"Ошибка при загрузке маппинга из {json_path}: {e}")
+
+
 def check_openai_access(retry_delay=5):
     """
     Проверяет доступ к OpenAI, отправляя тестовый запрос.
@@ -251,8 +269,6 @@ def create_embedding_for_query(query, update: Update):
             timeout=10,  # таймаут на получение ответа
         )
         return response.data[0].embedding
-    # except openai.error.Timeout as e:
-    #    print(f"Ошибка: Таймаут запроса - {e}")
     except Exception as e:
         logger.error(f"Ошибка: {e}")
         update.message.reply_text(
@@ -363,109 +379,101 @@ def generate_all_variants(user_query: str) -> list:
         for combo in product(*char_options):
             all_variants.add("".join(combo))
 
-    return list(all_variants)
+    return list(base_variants)
 
 
-def search_in_elasticsearch(user_query, top_n):
-    """
-    Выполняет поиск в Elasticsearch по ключевому слову или фразе и считает
-    точное количество вхождений в каждом документе.
+def search_in_elasticsearch(user_query, top_n, mode):
+    logger.info(f"Запустился метод search_in_elasticsearch с модом {mode}")
+    if mode == 2:
+        variants = generate_all_variants(user_query)
 
-    Аргументы:
-        user_query (str): Запрос пользователя (слово или фраза).
-        top_n (int): Количество релевантных документов.
+        should_clauses = []
+        logger.info(f"variants = {variants}")
+        for variant in variants:
 
-    Возвращает:
-        list: [(имя файла, найденные фрагменты, точное количество вхождений)]
-    """
-    # 1. Генерируем варианты запроса на основе user_query
-    variants = generate_all_variants(user_query)
-
-    # Собираем список условий 'should' по match_phrase для каждого варианта
-    should_clauses = []
-    for variant in variants:
-        should_clauses.append(
-            {"match_phrase": {"extracted_attachment.content": variant}}
-        )
-
-    # Формируем поисковый запрос
-    query = {
-        "size": 10,
-        "_source": ["filename"],
-        "query": {
-            "bool": {
-                "should": [
+            joined = user_query.replace(" ", "").replace("-", "")
+            should_clauses.extend(
+                [
+                    {
+                        "match_phrase": {
+                            "attachment.content": {"query": variant, "boost": 5}
+                        }
+                    },
+                    {
+                        "match_phrase": {
+                            "attachment.content": {"query": joined, "boost": 4}
+                        }
+                    },
                     {
                         "wildcard": {
-                            "attachment.content.keyword": {"value": f"*{variant}*"}
+                            "attachment.content": {"value": f"*{variant}*", "boost": 3}
                         }
-                    }
-                    for variant in variants  # <-- итерируемся по списку строк!
-                ],
-                "minimum_should_match": 1,
-            }
-        },
-        "highlight": {
-            "fields": {
-                "attachment.content": {"fragment_size": 20, "number_of_fragments": 10}
-            }
-        },
-    }
-    # print(variants)
-    # print(f"query - {query}")
-    try:
-        # 3. Отправляем запрос в Elasticsearch
-        response = requests.get(
-            ELASTIC_URL,
-            headers=HEADERS,
-            data=json.dumps(query),
-            auth=(ELASTIC_USER, ELASTIC_PASSWORD),
-            verify=False,
-        )
+                    },
+                    {"match": {"attachment.content": {"query": variant, "boost": 2}}},
+                ]
+            )
 
-        if response.status_code == 200:
-            result = response.json()
-            print(f"result - {result}")
-            hits = result.get("hits", {}).get("hits", [])
+        query = {
+            "size": 1000,
+            "_source": ["filename", "attachment.content"],
+            "query": {"bool": {"should": should_clauses, "minimum_should_match": 1}},
+        }
 
-            if hits:
-                search_results = []
+        try:
+            response = requests.get(
+                ELASTIC_URL,
+                headers=HEADERS,
+                data=json.dumps(query),
+                auth=(ELASTIC_USER, ELASTIC_PASSWORD),
+                verify=False,
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                hits = result.get("hits", {}).get("hits", [])
+
+                if not hits:
+                    return [("❌ Ничего не найдено", [], 0)]
+
+                # Группируем по filename
+                grouped_results = defaultdict(
+                    lambda: {"highlights": [], "occurrences": 0}
+                )
+
                 for hit in hits:
-                    filename = hit.get("_source", {}).get(
-                        "filename", "Неизвестный файл"
-                    )
-                    highlights = hit.get("highlight", {}).get(
-                        "attachment.content", ["Фрагменты не найдены"]
-                    )
+                    source = hit.get("_source", {})
+                    filename = source.get("filename", "Неизвестный файл")
+                    content = source.get("attachment", {}).get("content", "")
+                    highlights = []
+                    # Считаем вхождения в текущем чанке
+                    count = content.lower().count(user_query.lower()) if content else 0
 
-                    # Получаем полный текст документа
-                    content = (
-                        hit.get("_source", {}).get("attachment", {}).get("content", "")
-                    )
+                    grouped_results[filename]["highlights"].extend(highlights)
+                    grouped_results[filename]["occurrences"] += count
 
-                    # Считаем точное количество вхождений искомой фразы в тексте
-                    occurrences = (
-                        content.lower().count(user_query.lower()) if content else 0
-                    )
+                # Преобразуем в список и сортируем
+                search_results = [
+                    (filename, data["highlights"], data["occurrences"])
+                    for filename, data in grouped_results.items()
+                ]
 
-                    search_results.append((filename, highlights, occurrences))
-
-                # Сортируем по убыванию количества совпадений
                 search_results.sort(key=lambda x: x[2], reverse=True)
 
-                return search_results
+                return search_results[:top_n]
 
             else:
-                return [("❌ Ничего не найдено", [], 0)]
-        else:
-            return [
-                (f"⚠️ Ошибка запроса: {response.status_code} - {response.text}", [], 0)
-            ]
+                return [
+                    (
+                        f"⚠️ Ошибка запроса: {response.status_code} - {response.text}",
+                        [],
+                        0,
+                    )
+                ]
 
-    except requests.exceptions.RequestException as req_err:
-        return [(f"🚨 Ошибка сети: {req_err}", [], 0)]
-    except Exception as e:
-        return [(f"⚠️ Неизвестная ошибка: {e}", [], 0)]
+        except requests.exceptions.RequestException as req_err:
+            return [(f"🚨 Ошибка сети: {req_err}", [], 0)]
+        except Exception as e:
+            return [(f"⚠️ Неизвестная ошибка: {e}", [], 0)]
 
 
 def find_most_similar_with_collections(context, query_embedding, top_n=10):
@@ -760,7 +768,7 @@ async def handle_message(update: Update, context):
             [f"{obj[0]}" for obj in prioritized_texts_and_tables]
             # [f"{obj[0]} ({obj[1]})" for obj in prioritized_texts_and_tables] - закоментил, т.к. после текстового блока было системное имя родительной таблицы
         )
-
+        logger.info(f"Контекст 1 - {context_text}")
         # Добавляем изображения в контекст (если есть)
         if prioritized_images:
             context_text += "\n\nРисунки и текста:\n" + "\n".join(
@@ -770,11 +778,13 @@ async def handle_message(update: Update, context):
                     for img in prioritized_images
                 ]  # img[1] теперь берет related_table
             )
+            logger.info(f"Контекст 2 - {context_text}")
 
         if additional_contexts:
             context_text += "\n\nДополнительный контекст:\n" + "\n".join(
                 additional_contexts
             )
+            logger.info(f"Контекст 3 - {context_text}")
 
         table_contexts = []
         images_to_mention = []
@@ -803,6 +813,7 @@ async def handle_message(update: Update, context):
 
         if table_contexts:
             context_text += "\n\nТаблицы:\n" + "\n\n".join(table_contexts)
+            logger.info(f"Контекст 4 - {context_text}")
 
         # Сохраняем контекст в лог-файл
         log_filename = save_context_to_log(user_tag, context_text)
@@ -821,7 +832,7 @@ async def handle_message(update: Update, context):
         print(f"{all_image_mentions}")
         print(f"Конец проверки 1")"""
         all_table_mentions = find_table_mentions(context_text)
-
+        logger.info("Нашел все упоминания")
         images_to_mention = []
         tables_to_mention = []
         for image_text in all_image_mentions:
@@ -833,14 +844,15 @@ async def handle_message(update: Update, context):
                 images_to_mention.append((image_text, image_ref))
 
         images_text = "\n".join([img[0] for img in images_to_mention])
-
+        logger.info("Вставил ссылки на Рисунки")
         for table_text in all_table_mentions:
             table_ref = find_image_reference_in_milvus(table_text)
             if table_ref:
                 tables_to_mention.append((table_text, table_ref))
+        logger.info("Вставил ссылки на Таблицы")
 
         # context_text1 = standardize_model_name(context_text, 0)
-        logger.info(f"Используемый контекст: {context_text}")
+        # logger.info(f"Используемый контекст: {context_text}")
         logger.info("Отправка контекста к GPT")
         # Отправка всего контекста к GPT
         response = openai.chat.completions.create(
@@ -854,7 +866,7 @@ async def handle_message(update: Update, context):
                         ""
                         "Примечания к контексту:"
                         "Если в контексте будут таблицы, ты должен извлечь из них всю информацию (без вырезания информации), не сжимая ее и отправить эту таблицу в виде списка "
-                        'Если в контексте в таблицах узаканы рисунки, ты должен всегда упоминать их все в ответе в формате "Рисункок X" '
+                        'Если в контексте в таблицах узаканы рисунки, ты должен всегда упоминать их все в ответе в формате "Рисункок X"'
                         "Всегда указывай в ответе упомянутые Рисунки (не в конце ответа, а во всем тексте ответа)"
                         # "Если ты упоминаешь рисунки, то упоминай их в формате Рисунок Х."
                         # "Если ты упоминаешь таблицы, то упоминай их в формате ТаблицЕ Х"
@@ -1040,27 +1052,37 @@ async def handle_message_manuals(update: Update, context):
 
         return  # Обязательно выходим, чтобы не обрабатывать дальше
 
-    user_message = update.message.text
+    user_message = update.message.text.lower()
     user_tag = update.message.from_user.username or update.message.from_user.full_name
 
     try:
         # 🔎 Выполняем поиск в Elasticsearch
-        search_results = search_in_elasticsearch(user_message, 30)
+        # search_results1 = search_in_elasticsearch(user_message, 30, 1)
+        search_results2 = search_in_elasticsearch(user_message, 30, 2)
 
+        logger.info(f"search_results - {search_results2}")
         # Формируем ответ пользователю
         response_text = "📚 Найденные документы по Вашему запросу:\n\n"
         keyboard_buttons = []  # Кнопки для инлайн-клавиатуры
         count_finds = 1
         book_icons = ["📘", "📗", "📕"]
+        added_filenames = (
+            set()
+        )  # Новое: множество для отслеживания уже добавленных файлов
 
         # Получаем обратный словарь: filename -> file_id
         filename_to_id = context.bot_data.get("filename_to_id", {})
-
-        for filename, highlights, score in search_results:
+        response_text_to_sheet = "Пусто"
+        for filename, highlights, score in search_results2:
             # Если ничего не найдено
             if filename == "❌ Ничего не найдено":
                 response_text = f'❌ По вашему запросу ничего не найдено в базе.\nВоможно информация есть в режиме "Поиск по справочнику /metod"'
                 break
+
+            if filename in added_filenames:
+                continue  # ⚡ Пропускаем уже добавленные имена файлов
+
+            added_filenames.add(filename)  # ⚡ Добавляем новое имя в множество
 
             # Ищем ID по имени файла
             file_id = filename_to_id.get(filename)
@@ -1070,7 +1092,7 @@ async def handle_message_manuals(update: Update, context):
                 continue
 
             # Сокращаем название для кнопки, чтобы не было слишком длинным
-            short_display = filename
+            short_display = f"{filename}"  # 👈 показываем количество вхождений
             max_len = 40
             if len(filename) > max_len:
                 short_display = filename[:max_len] + "..."
@@ -1293,18 +1315,15 @@ def find_table_mentions(text):
 
 
 def find_image_reference_in_milvus(figure_id):
-    collection = Collection(name=milvus_collection_name)
+    """
+    Ищет соответствие figure_id в уже загруженном JSON_MAP
+    """
     try:
-        result = collection.query(
-            expr=f'figure_id == "{figure_id}"', output_fields=["reference"]
-        )
-        # print("Проверка 1")
-        # print(f"figure_id - {figure_id}")
-        # print(f"Найденный результат - {result[0]["reference"]}")
-        if result:
-            return result[0]["reference"]
+        for item in JSON_MAP:
+            if figure_id in item:
+                return item[figure_id]
     except Exception as e:
-        logger.error(f"Ошибка при поиске в Milvus для '{figure_id}': {e}")
+        logger.error(f"Ошибка при поиске в JSON_MAP для '{figure_id}': {e}")
     return None
 
 

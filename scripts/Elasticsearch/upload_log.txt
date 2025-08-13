@@ -387,3 +387,14 @@ AttributeError: 'str' object has no attribute 'append'
 2025-04-23 14:49:33,033 - WARNING - CropBox missing from /Page, defaulting to MediaBox
 2025-04-23 14:49:33,033 - WARNING - CropBox missing from /Page, defaulting to MediaBox
 2025-04-23 14:49:33,033 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-28 10:52:22,710 - INFO - Начата обработка файла: Эпик_ Разработка AI-бота.pdf
+2025-04-28 10:52:22,803 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-28 10:52:22,806 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-28 10:52:22,808 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-28 10:52:22,809 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-28 10:52:23,578 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-28 10:52:23,579 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-28 10:52:23,579 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-28 10:52:23,579 - WARNING - CropBox missing from /Page, defaulting to MediaBox
+2025-04-28 10:52:24,191 - INFO - Часть 1 файла Эпик_ Разработка AI-бота.pdf успешно загружена.
+2025-04-28 10:52:24,192 - INFO - Файл Эпик_ Разработка AI-бота.pdf успешно загружен и перемещён в C:\Project1\GITProjects\elastic_docker\ready
