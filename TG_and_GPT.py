@@ -38,7 +38,7 @@ from openpyxl import load_workbook  # работа с xlsx
 from io import StringIO
 from io import BytesIO
 from itertools import product
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 
 
 # Загрузка переменных окружения из файла .env
@@ -278,7 +278,7 @@ def create_embedding_for_query(query, update: Update):
 
 
 # Метод поиска наиболее релевантных эмбеддингов
-def find_most_similar(query_embedding, top_n=15):
+def find_most_similar(query_embedding, top_n=5):
     query_embedding_np = np.array([query_embedding], dtype=np.float32)
     similarities = np.dot(all_embeddings, query_embedding_np.T)
     most_similar_indices = np.argsort(similarities, axis=0)[::-1].flatten()
@@ -382,7 +382,72 @@ def generate_all_variants(user_query: str) -> list:
     return list(base_variants)
 
 
-def search_in_elasticsearch(user_query, top_n, mode):
+def search_by_filename_vector(user_query: str, update, k: int = 10) -> list[str]:
+    """
+    1) Строим вектор запроса (как сейчас) через create_embedding_for_query.
+    2) Делаем один запрос в ES: script_score + cosineSimilarity к полю 'filename_vector'.
+    3) Возвращаем только список filename (уникальные, в исходном порядке).
+    Требования: ELASTIC_URL -> '<host>/<index>/_search', HEADERS -> {'Content-Type':'application/json'}
+    """
+    logger.info("Запустился метод search_by_filename_vector")
+
+    # 1) эмбеддинг запроса (оставляем «как сейчас»)
+    try:
+        qvec = create_embedding_for_query(user_query, update)
+        if hasattr(qvec, "tolist"):
+            qvec = qvec.tolist()
+    except Exception as e:
+        logger.error(f"[vector_search] ошибка эмбеддинга: {e}")
+        return []
+
+    if not qvec or not isinstance(qvec, (list, tuple)):
+        logger.warning("[vector_search] пустой/некорректный вектор запроса")
+        return []
+
+    # 2) один запрос в ES — script_score + cosineSimilarity
+    es_query = {
+        "size": k,
+        "_source": ["filename"],
+        "query": {
+            "script_score": {
+                "query": {
+                    "exists": {"field": "filename_vector"}
+                },  # или {"match_all": {}}
+                "script": {
+                    # +1.0, чтобы не получить отрицательные score (часто удобнее для сортировки)
+                    "source": "cosineSimilarity(params.qvec, 'filename_vector') + 1.0",
+                    "params": {"qvec": qvec},
+                },
+            }
+        },
+    }
+
+    try:
+        resp = requests.post(
+            ELASTIC_URL,
+            headers=HEADERS,
+            data=json.dumps(es_query),
+            auth=(ELASTIC_USER, ELASTIC_PASSWORD),
+            verify=False,
+            timeout=20,
+        )
+        if resp.status_code != 200:
+            logger.error(f"[vector_search] ES {resp.status_code}: {resp.text[:300]}")
+            return []
+
+        hits = resp.json().get("hits", {}).get("hits", [])
+        names = [h.get("_source", {}).get("filename") for h in hits if h.get("_source")]
+        # Убираем None и дубликаты, сохраняя порядок
+        names = [x for x in OrderedDict.fromkeys([n for n in names if n])]
+        logger.info(f"[vector_search] найдено по векторам: {len(names)}")
+        return names[:k]
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"[vector_search] сеть/исключение: {e}")
+        return []
+
+
+def search_in_elasticsearch(user_query, top_n, mode, update):
     logger.info(f"Запустился метод search_in_elasticsearch с модом {mode}")
     if mode == 2:
         variants = generate_all_variants(user_query)
@@ -764,6 +829,7 @@ async def handle_message(update: Update, context):
         )
 
         # Формируем текст контекста из текстов и таблиц
+        context_text_v2 = "\n\n"
         context_text = "\n\n".join(
             [f"{obj[0]}" for obj in prioritized_texts_and_tables]
             # [f"{obj[0]} ({obj[1]})" for obj in prioritized_texts_and_tables] - закоментил, т.к. после текстового блока было системное имя родительной таблицы
@@ -778,13 +844,14 @@ async def handle_message(update: Update, context):
                     for img in prioritized_images
                 ]  # img[1] теперь берет related_table
             )
-            logger.info(f"Контекст 2 - {context_text}")
 
         if additional_contexts:
             context_text += "\n\nДополнительный контекст:\n" + "\n".join(
                 additional_contexts
             )
-            logger.info(f"Контекст 3 - {context_text}")
+            context_text_v2 += "\n\nДополнительный контекст:\n" + "\n".join(
+                additional_contexts
+            )
 
         table_contexts = []
         images_to_mention = []
@@ -813,7 +880,7 @@ async def handle_message(update: Update, context):
 
         if table_contexts:
             context_text += "\n\nТаблицы:\n" + "\n\n".join(table_contexts)
-            logger.info(f"Контекст 4 - {context_text}")
+            context_text_v2 += "\n\nТаблицы:\n" + "\n\n".join(table_contexts)
 
         # Сохраняем контекст в лог-файл
         log_filename = save_context_to_log(user_tag, context_text)
@@ -828,88 +895,101 @@ async def handle_message(update: Update, context):
 
         # Ищем упоминания рисунков в ответе и создаем ссылки на них
         all_image_mentions = find_image_mentions(context_text)
+        all_image_mentions2 = find_image_mentions(context_text_v2)
+
         """print(f"Проверка 1")
         print(f"{all_image_mentions}")
         print(f"Конец проверки 1")"""
         all_table_mentions = find_table_mentions(context_text)
+        all_table_mentions2 = find_image_mentions(context_text_v2)
         logger.info("Нашел все упоминания")
         images_to_mention = []
         tables_to_mention = []
+        seen_pairs = set()
         for image_text in all_image_mentions:
             """print(f"Проверка 2")
             print(f"{image_text}")
             print(f"Конец проверки 2")"""
             image_ref = find_image_reference_in_milvus(image_text)
             if image_ref:
-                images_to_mention.append((image_text, image_ref))
+                pair = (image_text, image_ref)
+                if pair not in seen_pairs:  # проверка уникальности
+                    images_to_mention.append(pair)
+                    seen_pairs.add(pair)
 
-        images_text = "\n".join([img[0] for img in images_to_mention])
+        unique_image_texts = sorted(
+            set(img[0] for img in images_to_mention),
+            key=lambda x: (
+                int("".join(filter(str.isdigit, x)))
+                if any(ch.isdigit() for ch in x)
+                else float("inf")
+            ),
+        )
+        images_text = "\n".join(unique_image_texts)
         logger.info("Вставил ссылки на Рисунки")
         for table_text in all_table_mentions:
             table_ref = find_image_reference_in_milvus(table_text)
             if table_ref:
                 tables_to_mention.append((table_text, table_ref))
         logger.info("Вставил ссылки на Таблицы")
-
-        # context_text1 = standardize_model_name(context_text, 0)
-        # logger.info(f"Используемый контекст: {context_text}")
-        logger.info("Отправка контекста к GPT")
+        logger.info(f"Список изображений - {images_text}")
+        # logger.info("Отправка контекста к GPT")
         # Отправка всего контекста к GPT
-        response = openai.chat.completions.create(
-            model=MODEL_GPT_INT,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Я хочу, чтобы ты выступил в роли ассистента-помощника для инженеров. "
-                        "Твоя основная задача - отвечать на вопросы, анализируя предоставленные данные, без выдумывания информации. Если нужной информации нет, просто скажи, что не можешь ответить на вопрос, так как данных недостаточно."
-                        ""
-                        "Примечания к контексту:"
-                        "Если в контексте будут таблицы, ты должен извлечь из них всю информацию (без вырезания информации), не сжимая ее и отправить эту таблицу в виде списка "
-                        'Если в контексте в таблицах узаканы рисунки, ты должен всегда упоминать их все в ответе в формате "Рисункок X"'
-                        "Всегда указывай в ответе упомянутые Рисунки (не в конце ответа, а во всем тексте ответа)"
-                        # "Если ты упоминаешь рисунки, то упоминай их в формате Рисунок Х."
-                        # "Если ты упоминаешь таблицы, то упоминай их в формате ТаблицЕ Х"
-                        # "Если ты упоминаешь таблицы, то не склоняй Таблицы\Таблиц\Таблице Х и т.д. Всегда пиши ТаблиЦА fХ"
-                        "Никогдда не отвечай в виде таблицы, вместо этого отвечай в виде списка"
-                        ""
-                        ""
-                        "Как отвечать:"
-                        "Не овечай в духе 'Лучше всего обратиться к производителю или квалифицированному инженеру для получения точной информации'"
-                        "Всегда при ответе указывай, на основе каких таблиц(В названии таблицы есть слово 'Таблица ') была основана большая часть твоего ответа, пиши ее/их имя полностью."
-                        "не склоняй и не меняй форму названия таблицы, если упоминаешь, то пиши Таблица"
-                        "Если нет релевантных изображений/таблиц - Не пиши что 'релевантные изображения/таблицы:отсутствуют' или 'Таблицы, на которых основан ответ:- отсутствуют' если нет таких, то вообще ничего не пиши"
-                        "Если тебе запрещено что-то или ты не можешь предоставить, не говори это пользователю"
-                        "Не указывай текстовые боки в ответе"
-                        "Если в контексте были упомянуты рисунки, то упоминай их так же в своем ответе "
-                        ""
-                        "Если пользователь запрашивает таблицу (например, 'Таблица Х' или 'Таблица Х полностью' или 'Что находится в Таблице Х', 'Что в Таблице Х')"
-                        "ты должен сообщить, что Таблица Х (название) есть в БД, без вывода содержимого таблицы. не говори, что ты не можешь предоставить ее содержимое"
-                        "Не отвеча 'Не могу ответить на вопрос, так как данных недостаточно', вместо этого отвечай, что 'Информации не найдено в справочнике, возможно информация есть в режиме 'Поиск мануалов'/metod'"
-                        ""
-                        # "Если встречаешь название модели, которое может быть переведено с русского на английский (или наоборот), старайся определить наиболее точное соответствие."
-                    ),
-                },
-                {
-                    "role": "system",
-                    "content": f"Дополнительные изображения по вашему запросу:\n\n{images_text}\n\n"
-                    f"Вот релевантная информация:\n\n{context_text}",
-                },
-                {"role": "user", "content": user_message},
-            ],
-            temperature=0.3,
-            timeout=30,
-        )
-        # logger.info(f"response ответа {response}")
-
-        bot_reply = response.choices[0].message.content
-
-        logger.info("Получен ответ от GPT")
+        # response = openai.chat.completions.create(
+        #    model=MODEL_GPT_INT,
+        #    messages=[
+        #        {
+        #            "role": "system",
+        #            "content": (
+        #                "Я хочу, чтобы ты выступил в роли ассистента-помощника для инженеров. "
+        #                "Твоя основная задача - отвечать на вопросы, анализируя предоставленные данные, без выдумывания информации. Если нужной информации нет, просто скажи, что не можешь ответить на вопрос, так как данных недостаточно."
+        #                ""
+        #                "Примечания к контексту:"
+        #                "Если в контексте будут таблицы, ты должен извлечь из них всю информацию (без вырезания информации), не сжимая ее и отправить эту таблицу в виде списка "
+        #                'Если в контексте в таблицах узаканы рисунки, ты должен всегда упоминать их все в ответе в формате "Рисункок X"'
+        #                "Всегда указывай в ответе упомянутые Рисунки (не в конце ответа, а во всем тексте ответа)"
+        #                # "Если ты упоминаешь рисунки, то упоминай их в формате Рисунок Х."
+        #                # "Если ты упоминаешь таблицы, то упоминай их в формате ТаблицЕ Х"
+        #                # "Если ты упоминаешь таблицы, то не склоняй Таблицы\Таблиц\Таблице Х и т.д. Всегда пиши ТаблиЦА fХ"
+        #                "Никогдда не отвечай в виде таблицы, вместо этого отвечай в виде списка"
+        #                ""
+        #                ""
+        #                "Как отвечать:"
+        #                "Не овечай в духе 'Лучше всего обратиться к производителю или квалифицированному инженеру для получения точной информации'"
+        #                "Всегда при ответе указывай, на основе каких таблиц(В названии таблицы есть слово 'Таблица ') была основана большая часть твоего ответа, пиши ее/их имя полностью."
+        #                "не склоняй и не меняй форму названия таблицы, если упоминаешь, то пиши Таблица"
+        #                "Если нет релевантных изображений/таблиц - Не пиши что 'релевантные изображения/таблицы:отсутствуют' или 'Таблицы, на которых основан ответ:- отсутствуют' если нет таких, то вообще ничего не пиши"
+        #                "Если тебе запрещено что-то или ты не можешь предоставить, не говори это пользователю"
+        #                "Не указывай текстовые боки в ответе"
+        #                "Если в контексте были упомянуты рисунки, то упоминай их так же в своем ответе "
+        #                ""
+        #                "Если пользователь запрашивает таблицу (например, 'Таблица Х' или 'Таблица Х полностью' или 'Что находится в Таблице Х', 'Что в Таблице Х')"
+        #                "ты должен сообщить, что Таблица Х (название) есть в БД, без вывода содержимого таблицы. не говори, что ты не можешь предоставить ее содержимое"
+        #                "Не отвеча 'Не могу ответить на вопрос, так как данных недостаточно', вместо этого отвечай, что 'Информации не найдено в справочнике, возможно информация есть в режиме 'Поиск мануалов'/metod'"
+        #                ""
+        #                # "Если встречаешь название модели, которое может быть переведено с русского на английский (или наоборот), старайся определить наиболее точное соответствие."
+        #            ),
+        #        },
+        #        {
+        #            "role": "system",
+        #            "content": f"Дополнительные изображения по вашему запросу:\n\n{images_text}\n\n"
+        #            f"Вот релевантная информация:\n\n{context_text}",
+        #        },
+        #        {"role": "user", "content": user_message},
+        #    ],
+        #    temperature=0.3,
+        #    timeout=30,
+        # )
+        ## logger.info(f"response ответа {response}")
+        #
+        # bot_reply = response.choices[0].message.content
+        #
+        # logger.info("Получен ответ от GPT")
         logger.info("Начинается обработка ответа")
 
         # Найти дополнительные упоминания рисунков, которые есть только в bot_reply
-        additional_image_mentions = find_image_mentions(bot_reply)
-        additional_table_mentions = find_table_mentions(bot_reply)
+        additional_image_mentions = find_image_mentions(context_text)
+        additional_table_mentions = find_table_mentions(context_text)
 
         for image_text in additional_image_mentions:
             if image_text not in [mention[0] for mention in images_to_mention]:
@@ -924,28 +1004,37 @@ async def handle_message(update: Update, context):
                 table_ref = find_image_reference_in_milvus(table_text)
                 if table_ref:
                     tables_to_mention.append((table_text, table_ref))
+        ready_requesr = ""
+        images_index_str = find_figures_with_titles(context_text)
+        if images_index_str:
+            ready_requesr += "\n\nСводка упоминаний Рисунков:\n" + images_index_str
+            # context_text += "\n\nСводка упоминаний Рисунков:\n" + images_index_str
+        tables_index_str = find_tables_with_titles(context_text)
+        if tables_index_str:
+            ready_requesr += "\n\nСводка упоминаний таблиц:\n" + tables_index_str
+            # context_text += "\n\nСводка упоминаний таблиц:\n" + tables_index_str
 
-        bot_reply = response.choices[0].message.content
         # Замена символов < и > на HTML-эквиваленты
-        bot_reply = bot_reply.replace("<", "&lt;").replace(">", "&gt;")
+        ready_requesr = ready_requesr.replace("<", "&lt;").replace(">", "&gt;")
+        # context_text = context_text.replace("<", "&lt;").replace(">", "&gt;")
 
-        # print("Список images_to_mention")
-        # print(images_to_mention)
-        # print("Конец списка images_to_mention")
-        bot_reply = normalize_mentions(bot_reply)
-        formatted_reply = format_image_links(bot_reply, images_to_mention)
-        logger.info(f"Отправка ответа пользователю {user_tag}: {formatted_reply}")
+        ready_requesr = normalize_mentions(ready_requesr)
+        # context_text = normalize_mentions(context_text)
+
+        formatted_reply = format_image_links(ready_requesr, images_to_mention)
+        # logger.info(f"Отправка ответа пользователю {user_tag}: {formatted_reply}")
         await send_large_message(update, formatted_reply)
         await send_table_to_chat(update, tables_to_mention, formatted_reply)
         await request_feedback(update, context)
 
         images_to_send = []
         for image_text, ref in images_to_mention:
-            if image_text.split(" ")[0] in bot_reply:
+            # if image_text.split(" ")[0] in ready_requesr:
+            if image_text.split(" ")[0] in ready_requesr:
                 images_to_send.append(ref)
 
         save_user_question_to_sheet(
-            user_message, bot_reply, user_tag, log_filename, "Режим Справочника"
+            user_message, ready_requesr, user_tag, log_filename, "Режим Справочника"
         )
 
         await asyncio.sleep(1)
@@ -971,6 +1060,88 @@ async def handle_message(update: Update, context):
             await update.message.reply_text(
                 f"❌ Произошла ошибка при получении ответа:\n{error_message}"
             )
+
+
+# Поиск всех упомянутых рисунков в контексте
+def find_figures_with_titles(full_text: str) -> str:
+    """
+    Ищет в тексте 'Рисунок X (<Название>)' с поддержкой вложенных скобок.
+    Возвращает строку, где каждая строка — уникальное упоминание рисунка.
+    """
+    norm = " ".join(full_text.replace("\u00a0", " ").split())  # нормализация пробелов
+
+    results = []
+    seen = set()
+
+    # Находим начало каждого упоминания
+    for match in re.finditer(r"(?i)\bРисунок\s+(\d+)\s*\(", norm):
+        num = match.group(1)
+        start = match.end() - 1  # позиция на '('
+
+        # Балансируем скобки
+        depth = 0
+        end = None
+        for i, ch in enumerate(norm[start:], start=start):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+
+        if end:
+            title = norm[start + 1 : end].strip()  # без крайних скобок
+            item = f"Рисунок {num} ({title})"
+            if item not in seen:
+                seen.add(item)
+                results.append((int(num), item))
+
+    # Сортируем по номеру
+    results.sort(key=lambda x: x[0])
+
+    return "\n".join(item for _, item in results)
+
+
+# Поиск всех упомянутых таблиц в контексте
+def find_tables_with_titles(full_text: str) -> str:
+    """
+    Ищет в тексте 'Таблица X (<Название>)' с поддержкой вложенных скобок.
+    Возвращает строку, где каждая таблица на новой строке.
+    """
+    norm = " ".join(full_text.replace("\u00a0", " ").split())  # нормализация пробелов
+
+    results = []
+    seen = set()
+
+    # Находим начало каждого упоминания
+    for match in re.finditer(r"(?i)\bТаблица\s+(\d+)\s*\(", norm):
+        num = match.group(1)
+        start = match.end() - 1  # позиция на '('
+
+        # Балансируем скобки
+        depth = 0
+        end = None
+        for i, ch in enumerate(norm[start:], start=start):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+
+        if end:
+            title = norm[start + 1 : end].strip()  # без крайних скобок
+            item = f"Таблица {num} ({title})"
+            if item not in seen:
+                seen.add(item)
+                results.append((int(num), item))
+
+    # Сортируем по номеру
+    results.sort(key=lambda x: x[0])
+
+    return "\n".join(item for _, item in results)
 
 
 # нормализует слово standard
@@ -1057,8 +1228,7 @@ async def handle_message_manuals(update: Update, context):
 
     try:
         # 🔎 Выполняем поиск в Elasticsearch
-        # search_results1 = search_in_elasticsearch(user_message, 30, 1)
-        search_results2 = search_in_elasticsearch(user_message, 30, 2)
+        search_results2 = search_in_elasticsearch(user_message, 30, 2, update)
 
         logger.info(f"search_results - {search_results2}")
         # Формируем ответ пользователю
@@ -1119,6 +1289,60 @@ async def handle_message_manuals(update: Update, context):
 
         await update.message.reply_text(response_text, reply_markup=reply_markup)
 
+    except Exception as e:
+        logger.error(f"Ошибка обработки сообщения в режиме мануалов: {e}")
+        await update.message.reply_text("❌ Ошибка при обработке запроса.")
+
+    # 🧲 Новый поиск по векторам filename
+    try:
+        vector_filenames = search_by_filename_vector(user_message, update, k=10)
+
+        logger.info(f"vector_filenames - {vector_filenames}")
+
+        if vector_filenames:
+            vector_buttons = []
+            added_vectors = set()
+            count_vec = 1
+            response_text_vec = "🧲 Похожие документы по названию файла:\n\n"
+
+            for fname in vector_filenames:
+                if not fname or fname in added_vectors:
+                    continue
+                file_id = filename_to_id.get(fname)
+                if not file_id:
+                    continue
+                added_vectors.add(fname)
+
+                short_display = fname if len(fname) <= 40 else fname[:40] + "..."
+                book_icon = book_icons[count_vec % 3]
+
+                callback_data = f"file_{file_id}"
+                vector_buttons.append(
+                    [
+                        InlineKeyboardButton(
+                            text=f"{book_icon} {short_display}",
+                            callback_data=callback_data,
+                        )
+                    ]
+                )
+
+                response_text_vec += f"{book_icon} {fname}\n"
+                response_text_to_sheet += f"{book_icon} {fname}\n"
+
+                count_vec += 1
+
+            vec_markup = InlineKeyboardMarkup(vector_buttons)
+            await update.message.reply_text(response_text_vec, reply_markup=vec_markup)
+        else:
+            await update.message.reply_text(
+                "🧲 Похожие документы по названию файла не найдены."
+            )
+
+    except Exception as e:
+        logger.error(f"Ошибка vector_search: {e}")
+        await update.message.reply_text("❌ Ошибка при обработке запроса.")
+
+    try:
         # Запрашиваем оценку
         await request_feedback(update, context)
 
@@ -1134,7 +1358,6 @@ async def handle_message_manuals(update: Update, context):
             log_filename,
             "Режим Мануалов",
         )
-
     except Exception as e:
         logger.error(f"Ошибка обработки сообщения в режиме мануалов: {e}")
         await update.message.reply_text("❌ Ошибка при обработке запроса.")
@@ -1163,12 +1386,8 @@ def format_image_links(bot_reply, images_to_mention):
         image_url = (
             f"{MINIO_ENDPOINT}/{MINIO_BUCKET_NAME}/{minio_folder_docs_name}/{ref}"
         )
-        # print(f"{image_url}, {ref}")
-        # logger.info(f"найденные все картинки - {image_text} {ref}")
         # Формируем кликабельную ссылку в формате HTML
         link_text = f'<a href="{image_url}" target="_blank">{image_text}</a>'
-        # print("Проверка link_text")
-        # print(link_text)
         # Заменяем все упоминания "Рисунок X" на кликабельную ссылку
         bot_reply = re.sub(
             rf"\b{re.escape(image_text)}\b",  # \b обеспечивает точное совпадение слова
@@ -1180,44 +1399,50 @@ def format_image_links(bot_reply, images_to_mention):
 
 
 # Метод, находящий в MiniO таблички по упоминанию "Таблица Х"
+import re
+from io import BytesIO
+
+
+# Метод, находящий в MiniO таблички по упоминанию "Таблица Х"
 async def send_table_to_chat(update, tables_to_mention, formatted_reply):
     """
     Находит таблицы в MinIO по упоминанию, проверяет их присутствие в ответе GPT,
     исключает повторную отправку и отправляет их в чат Telegram.
     """
-    sent_tables = set()  # Хранилище для уже отправленных таблиц
+    sent_tables = set()  # уже отправленные (по ref)
+
+    def is_table_label(text: str) -> bool:
+        # нормализуем пробелы и неразрывные пробелы
+        t = " ".join(str(text).replace("\u00a0", " ").split())
+        # обрабатываем ТОЛЬКО "Таблица ..." (без "Рисунок ...")
+        return re.match(r"(?i)^\s*Таблица\b", t) is not None
 
     for table_text, ref in tables_to_mention:
-        # Проверяем, упоминается ли таблица в ответе GPT
-        # Используем регулярное выражение для точного совпадения таблицы
-        pattern = rf"\b{re.escape(table_text)}\b"  # \b обозначает границы слова
-
-        if not re.search(
-            pattern, formatted_reply
-        ):  # Если таблица не упоминается, пропускаем
+        # 1) пропускаем всё, что не "Таблица ..."
+        if not is_table_label(table_text):
+            # logger.debug(f"Пропускаем не-табличное упоминание: {table_text}")
             continue
 
-        # Проверяем, отправлялась ли таблица ранее
+        # 2) должно упоминаться в ответе
+        pattern = rf"\b{re.escape(table_text)}\b"
+        if not re.search(pattern, formatted_reply):
+            continue
+
+        # 3) не отправляем дубликаты
         if ref in sent_tables:
-            # logger.info(f"Таблица {table_text} уже была отправлена ранее. Пропускаем.")
             continue
 
         logger.info(f"Обработка таблицы: {table_text} с системным именем {ref}")
         try:
-            # Проверяем существование таблицы в MinIO
             table_key = f"{minio_folder_docs_name}/{ref}"
             response = s3_client.get_object(Bucket=MINIO_BUCKET_NAME, Key=table_key)
             file_data = response["Body"].read()
 
-            # Отправляем таблицу пользователю как документ
             await update.message.reply_document(
                 document=BytesIO(file_data),
                 filename=f"{table_text}.xlsx",
-                # caption=f"Таблица {table_text} из вашего запроса.",
             )
-            # logger.info(f"Таблица {table_text} успешно отправлена.")
 
-            # Добавляем таблицу в список отправленных
             sent_tables.add(ref)
         except Exception as e:
             logger.error(f"Не удалось отправить таблицу {table_text}: {e}")
@@ -1226,42 +1451,51 @@ async def send_table_to_chat(update, tables_to_mention, formatted_reply):
             )
 
 
+# Режем HTML-текст так, чтобы не рвать теги и ссылки
+def _split_html_safe(text: str, max_len: int = 4096):
+    chunks = []
+    i = 0
+    n = len(text)
+
+    while i < n:
+        end = min(i + max_len, n)
+        seg = text[i:end]
+
+        # 1) если внутри сегмента открытых <a ...> больше, чем закрытых </a> — откатимся до последнего закрытия
+        opens = len(re.findall(r"<a\b", seg))
+        closes = len(re.findall(r"</a>", seg))
+        if opens > closes:
+            last_close = seg.rfind("</a>")
+            if last_close != -1:
+                end = i + last_close + 4  # включаем </a>
+                seg = text[i:end]
+
+        # 2) если всё ещё разрезаем внутри тега (есть '<' после последнего '>') — откатываемся до последнего '>'
+        last_lt = seg.rfind("<")
+        last_gt = seg.rfind(">")
+        if last_lt > last_gt:
+            if last_gt != -1:
+                end = i + last_gt + 1
+                seg = text[i:end]
+
+        # 3) если кусок пустой (случилось сильное откатывание), чтобы не зациклиться — принудительно двигаемся вперёд
+        if end <= i:
+            end = min(i + max_len, n)
+            seg = text[i:end]
+
+        chunks.append(seg.strip())
+        i = end
+
+    # убираем пустые куски
+    return [c for c in chunks if c]
+
+
 # Метод, разделяющий сообщения от ТГ Бота по 4000 символов с лог заглючением по абзацам
-async def send_large_message(update, text, max_length=4000):
-    # Разбиваем текст по абзацам
-    paragraphs = text.split("\n\n")
-    current_message = ""
-
-    for paragraph in paragraphs:
-        # Проверяем, если текущий абзац слишком длинный, чтобы отправить его как есть
-        if len(paragraph) > max_length:
-            # Если абзац превышает max_length, разбиваем его на подчасти
-            sub_paragraphs = [
-                paragraph[i : i + max_length]
-                for i in range(0, len(paragraph), max_length)
-            ]
-            for sub_paragraph in sub_paragraphs:
-                # await update.message.reply_text(sub_paragraph)
-                await update.message.reply_text(sub_paragraph, parse_mode="HTML")
-            continue  # Переходим к следующему абзацу после отправки разбиения
-
-        # Проверяем, можно ли добавить текущий абзац в сообщение
-        if len(current_message) + len(paragraph) + 2 <= max_length:
-            # Добавляем абзац в текущее сообщение
-            if current_message:
-                current_message += "\n\n" + paragraph
-            else:
-                current_message = paragraph
-        else:
-            # Если текущее сообщение заполнено, отправляем его и начинаем новое
-            # await update.message.reply_text(current_message)
-            await update.message.reply_text(current_message, parse_mode="HTML")
-            current_message = paragraph  # Начинаем новое сообщение с текущего абзаца
-
-    # Отправляем оставшуюся часть сообщения, если что-то осталось
-    if current_message:
-        # await update.message.reply_text(current_message)
-        await update.message.reply_text(current_message, parse_mode="HTML")
+async def send_large_message(update, text: str, max_length: int = 4096):
+    for chunk in _split_html_safe(text, max_length):
+        await update.message.reply_text(
+            chunk, parse_mode="HTML", disable_web_page_preview=True
+        )
 
 
 async def send_large_message_for_manuals(update, text, max_length=4000):
