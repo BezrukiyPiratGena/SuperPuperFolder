@@ -382,16 +382,16 @@ def generate_all_variants(user_query: str) -> list:
     return list(base_variants)
 
 
-def search_by_filename_vector(user_query: str, update, k: int = 10) -> list[str]:
+def search_by_filename_vector(user_query: str, update, k: int = 1000) -> list[str]:
     """
-    1) Строим вектор запроса (как сейчас) через create_embedding_for_query.
-    2) Делаем один запрос в ES: script_score + cosineSimilarity к полю 'filename_vector'.
-    3) Возвращаем только список filename (уникальные, в исходном порядке).
-    Требования: ELASTIC_URL -> '<host>/<index>/_search', HEADERS -> {'Content-Type':'application/json'}
+    1) Строим вектор запроса (как сейчас).
+    2) Делаем запрос в ES по filename_vector.
+    3) ЛОГИРУЕМ ПОЛНЫЙ СПИСОК ХИТОВ (filename, score, _id) БЕЗ ДЕДУПЛИКАЦИИ.
+    4) Возвращаем имена файлов БЕЗ ОБЪЕДИНЕНИЯ ОДИНАКОВЫХ (ограничение по k).
     """
     logger.info("Запустился метод search_by_filename_vector")
 
-    # 1) эмбеддинг запроса (оставляем «как сейчас»)
+    # 1) эмбеддинг запроса
     try:
         qvec = create_embedding_for_query(user_query, update)
         if hasattr(qvec, "tolist"):
@@ -404,17 +404,14 @@ def search_by_filename_vector(user_query: str, update, k: int = 10) -> list[str]
         logger.warning("[vector_search] пустой/некорректный вектор запроса")
         return []
 
-    # 2) один запрос в ES — script_score + cosineSimilarity
+    # 2) запрос в ES (script_score; если у тебя есть KNN-ветка — добавь такое же логирование и туда)
     es_query = {
         "size": k,
         "_source": ["filename"],
         "query": {
             "script_score": {
-                "query": {
-                    "exists": {"field": "filename_vector"}
-                },  # или {"match_all": {}}
+                "query": {"exists": {"field": "filename_vector"}},
                 "script": {
-                    # +1.0, чтобы не получить отрицательные score (часто удобнее для сортировки)
                     "source": "cosineSimilarity(params.qvec, 'filename_vector') + 1.0",
                     "params": {"qvec": qvec},
                 },
@@ -435,12 +432,29 @@ def search_by_filename_vector(user_query: str, update, k: int = 10) -> list[str]
             logger.error(f"[vector_search] ES {resp.status_code}: {resp.text[:300]}")
             return []
 
-        hits = resp.json().get("hits", {}).get("hits", [])
-        names = [h.get("_source", {}).get("filename") for h in hits if h.get("_source")]
-        # Убираем None и дубликаты, сохраняя порядок
-        names = [x for x in OrderedDict.fromkeys([n for n in names if n])]
-        logger.info(f"[vector_search] найдено по векторам: {len(names)}")
-        return names[:k]
+        payload = resp.json()
+        hits = payload.get("hits", {}).get("hits", [])
+
+        # 3) подробное логирование ВСЕХ найденных хитов без объединения
+        # пример строки лога: "PGM-09 OMR 6.pdf | score=1.1234 | id=z1o58JgBMxGGzZDBwUVC"
+        if hits:
+            lines = []
+            for h in hits:
+                src = h.get("_source", {}) or {}
+                fname = src.get("filename")
+                score = h.get("_score")
+                hid = h.get("_id")
+                lines.append(f"{fname} | score={score:.4f} | id={hid}")
+            logger.info("[vector_search] RAW HITS:\n" + "\n".join(lines))
+        else:
+            logger.info("[vector_search] RAW HITS: пусто")
+
+        # 4) возвращаем без объединения одинаковых (как просил)
+        names_raw = [
+            h.get("_source", {}).get("filename") for h in hits if h.get("_source")
+        ]
+        logger.info(f"[vector_search] всего имён (raw, с повторами): {len(names_raw)}")
+        return names_raw[:k]
 
     except requests.exceptions.RequestException as e:
         logger.error(f"[vector_search] сеть/исключение: {e}")
@@ -1295,14 +1309,13 @@ async def handle_message_manuals(update: Update, context):
 
     # 🧲 Новый поиск по векторам filename
     try:
-        vector_filenames = search_by_filename_vector(user_message, update, k=10)
-
-        logger.info(f"vector_filenames - {vector_filenames}")
+        vector_filenames = search_by_filename_vector(user_message, update)
 
         if vector_filenames:
             vector_buttons = []
             added_vectors = set()
             count_vec = 1
+            MAX_DOCS = 20
             response_text_vec = "🧲 Похожие документы по названию файла:\n\n"
 
             for fname in vector_filenames:
@@ -1326,10 +1339,11 @@ async def handle_message_manuals(update: Update, context):
                     ]
                 )
 
-                response_text_vec += f"{book_icon} {fname}\n"
                 response_text_to_sheet += f"{book_icon} {fname}\n"
 
                 count_vec += 1
+                if count_vec > MAX_DOCS:  # ← здесь ограничение
+                    break
 
             vec_markup = InlineKeyboardMarkup(vector_buttons)
             await update.message.reply_text(response_text_vec, reply_markup=vec_markup)
