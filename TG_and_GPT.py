@@ -111,7 +111,7 @@ google_credentials = {  # Тут все ключи для работы API от 
 
 URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
 firts_message_from_tg_bot = "Привет!🖐 Я ассистент для инженеров, перед тем как задать мне вопрос, выбери режим работы через команду '/metod'"
-
+print(f"Ключ - {OPENAI_API_KEY}")
 minio_folder_docs_name = MINIO_FOLDER_DOCS_NAME_SPRAVOCHNIK
 milvus_collection_name = MILVUS_COLLECTION
 # milvus_collection_name = MILVUS_COLLECTION_SPRAVOCHNIK
@@ -648,6 +648,7 @@ async def metod(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("Поиск по справочнику", callback_data="engs_bot")],
         [InlineKeyboardButton("Поиск мануалов", callback_data="manuals_engrs")],
+        [InlineKeyboardButton("Правила регистра", callback_data="register_engrs")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -796,9 +797,12 @@ async def handle_message(update: Update, context):
     )
     # print(f"handle_message_method - {handle_message_method}")
 
-    # Если метод другой (например, handle_message_manuals), вызываем его
-    if handle_message_method != "engs_bot":
+    if handle_message_method == "engs_bot":
         await handle_message_manuals(update, context)
+        return
+
+    if handle_message_method == "register_engrs":
+        await handle_message_register(update, context)
         return
 
     # Проверяем, ждет ли бот оценку
@@ -1209,6 +1213,56 @@ def normalize_mentions(gpt_response):
     # print(f"gpt ответ после исправлений: {gpt_response}")
 
     return gpt_response
+
+
+async def handle_message_register(update: Update, context):
+    if context.user_data.get("last_selected_mode") != "register_engrs":
+        logger.error("handle_message_register вызван вне режима мануалов.")
+        return
+
+    # Проверяем, ждет ли бот оценку
+    if context.user_data.get("awaiting_feedback", False):
+        user_text = update.message.text.strip()
+
+        # Если пользователь ввёл секретное слово Alein, сбрасываем ожидание
+        if user_text == "Alein":
+            context.user_data["awaiting_feedback"] = False
+            await update.message.reply_text(
+                "Оценка пропущена. Теперь вы можете задать новый вопрос."
+            )
+        else:
+            # Если это не Alein, блокируем вопрос
+            await update.message.reply_text(
+                "⚠️ Сначала оцените предыдущий ответ, прежде чем задать новый вопрос!"
+            )
+
+        return  # Обязательно выходим, чтобы не обрабатывать дальше
+
+    user_id = update.message.from_user.id
+    user_message = update.message.text
+    user_tag = update.message.from_user.username or update.message.from_user.full_name
+
+    response_text = "Ответ модели РЕГИСТРА"
+
+    try:
+        # Запрашиваем оценку
+        await request_feedback(update, context)
+
+        # Сохраняем лог
+        log_filename = save_context_to_log(user_tag, response_text)
+        logger.info(f"Контекст для {user_tag} сохранен в файл: {log_filename}")
+
+        # Логируем в Google Таблицу
+        save_user_question_to_sheet(
+            user_message,
+            response_text,
+            user_tag,
+            log_filename,
+            "Режим Мануалов",
+        )
+    except Exception as e:
+        logger.error(f"Ошибка обработки сообщения в режиме мануалов: {e}")
+        await update.message.reply_text("❌ Ошибка при обработке запроса.")
 
 
 # Метод для обработки сообщений в режиме мануалов
@@ -1738,7 +1792,7 @@ async def handle_all_callbacks(update: Update, context):
         "file_"
     ):  # 📌 Проверяем, кликает ли пользователь на документ
         await send_manual_by_callback(update, context)
-    elif query.data in ["engs_bot", "manuals_engrs"]:
+    elif query.data in ["engs_bot", "manuals_engrs", "register_engrs"]:
         await handle_callback_metod(update, context)  # Вызов выбора режима
     elif query.data.startswith("feedback_"):
         await handle_feedback_callback(update, context)  # Вызов обработки оценки
@@ -1878,6 +1932,12 @@ async def handle_callback_metod(update: Update, context: ContextTypes.DEFAULT_TY
             "Вы выбрали режим: Поиск мануалов📚 \n\nМожете задать вопрос"
         )
         context.user_data["handle_message_method"] = handle_message_manuals
+
+    elif selected_method == "register_engrs":
+        await query.edit_message_text(
+            "Вы выбрали режим: Поиск по регистру📚 \n\nМожете задать вопрос"
+        )
+        context.user_data["handle_message_method"] = handle_message_register
 
     # Сохраняем метод работы в память бота
     context.user_data["selected_method"] = selected_method
